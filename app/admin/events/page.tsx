@@ -361,7 +361,7 @@ export default function AdminEventsPage() {
               })}
             </div>
           ) : (
-            <p className="text-gray-500">No events created yet. Click "Create Event" to get started.</p>
+            <p className="text-gray-500">No events created yet. Click &quot;Create Event&quot; to get started.</p>
           )}
         </div>
       </div>
