@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createBrowserClient } from '@/lib/supabase/client';
 import { healthMetricSchema, type HealthMetricInput } from '@/lib/validations';
 import type { HealthMetric } from './types';
+import { logDbOperation } from '@/lib/logger';
 
 /**
  * Get all health metrics for the current user
@@ -16,6 +17,7 @@ export async function getUserHealthMetrics(): Promise<{ metrics: HealthMetric[];
       return { metrics: [], error: new Error('Not authenticated') };
     }
 
+    const startTime = Date.now();
     const { data, error } = await supabase
       .from('health_metrics')
       .select('*')
@@ -23,8 +25,25 @@ export async function getUserHealthMetrics(): Promise<{ metrics: HealthMetric[];
       .order('recorded_date', { ascending: false });
 
     if (error) {
+      logDbOperation({
+        operation: 'select',
+        table: 'health_metrics',
+        userId: user.id,
+        query: { user_id: user.id },
+        error: new Error(error.message),
+        duration: Date.now() - startTime,
+      });
       return { metrics: [], error: new Error(error.message) };
     }
+
+    logDbOperation({
+      operation: 'select',
+      table: 'health_metrics',
+      userId: user.id,
+      query: { user_id: user.id },
+      result: data,
+      duration: Date.now() - startTime,
+    });
 
     return { metrics: (data || []) as HealthMetric[], error: null };
   } catch (err) {
@@ -44,6 +63,7 @@ export async function getLatestHealthMetric(): Promise<{ metric: HealthMetric | 
       return { metric: null, error: new Error('Not authenticated') };
     }
 
+    const startTime = Date.now();
     const { data, error } = await supabase
       .from('health_metrics')
       .select('*')
@@ -53,6 +73,14 @@ export async function getLatestHealthMetric(): Promise<{ metric: HealthMetric | 
       .maybeSingle();
 
     if (error && error.code !== 'PGRST116') {
+      logDbOperation({
+        operation: 'select',
+        table: 'health_metrics',
+        userId: user.id,
+        query: { user_id: user.id, limit: 1 },
+        error: new Error(error.message),
+        duration: Date.now() - startTime,
+      });
       return { metric: null, error: new Error(error.message) };
     }
 
@@ -90,6 +118,7 @@ export async function createHealthMetric(input: HealthMetricInput): Promise<{ me
     if (validated.body_fat !== undefined) insertData.body_fat = validated.body_fat;
     if (validated.notes !== undefined) insertData.notes = validated.notes;
 
+    const startTime = Date.now();
     const { data, error } = await supabase
       .from('health_metrics')
       .insert(insertData)
@@ -97,8 +126,25 @@ export async function createHealthMetric(input: HealthMetricInput): Promise<{ me
       .single();
 
     if (error) {
+      logDbOperation({
+        operation: 'insert',
+        table: 'health_metrics',
+        userId: user.id,
+        query: insertData,
+        error: new Error(error.message),
+        duration: Date.now() - startTime,
+      });
       return { metric: null, error: new Error(error.message) };
     }
+
+    logDbOperation({
+      operation: 'insert',
+      table: 'health_metrics',
+      userId: user.id,
+      query: insertData,
+      result: data,
+      duration: Date.now() - startTime,
+    });
 
     return { metric: data as HealthMetric, error: null };
   } catch (err) {
@@ -137,6 +183,7 @@ export async function createHealthMetricClient(input: HealthMetricInput): Promis
     if (validated.body_fat !== undefined) insertData.body_fat = validated.body_fat;
     if (validated.notes !== undefined) insertData.notes = validated.notes;
 
+    const startTime = Date.now();
     const { data, error } = await supabase
       .from('health_metrics')
       .insert(insertData)
@@ -144,8 +191,25 @@ export async function createHealthMetricClient(input: HealthMetricInput): Promis
       .single();
 
     if (error) {
+      logDbOperation({
+        operation: 'insert',
+        table: 'health_metrics',
+        userId: user.id,
+        query: insertData,
+        error: new Error(error.message),
+        duration: Date.now() - startTime,
+      });
       return { metric: null, error: new Error(error.message) };
     }
+
+    logDbOperation({
+      operation: 'insert',
+      table: 'health_metrics',
+      userId: user.id,
+      query: insertData,
+      result: data,
+      duration: Date.now() - startTime,
+    });
 
     return { metric: data as HealthMetric, error: null };
   } catch (err) {

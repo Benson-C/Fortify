@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { logger } from '@/lib/logger'
 
 // Module-level flag to log warning only once per server start
 let envWarningLogged = false
@@ -15,11 +16,7 @@ export async function updateSession(request: NextRequest) {
   if (!supabaseUrl || !supabaseAnonKey) {
     // Only log once per server start, not on every request
     if (!envWarningLogged) {
-      console.error(
-        'Missing Supabase environment variables in middleware.\n' +
-        'Please ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in .env.local\n' +
-        'and restart your dev server.'
-      )
+      logger.middleware('Missing Supabase environment variables in middleware. Please ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in .env.local and restart your dev server.')
       envWarningLogged = true
     }
     return NextResponse.json(
@@ -71,11 +68,18 @@ export async function updateSession(request: NextRequest) {
   // If user is authenticated, check role-based routing
   if (user) {
     // Check if user is admin using admin_users table
-    const { data: adminCheck } = await supabase
+    const { data: adminCheck, error: adminError } = await supabase
       .from('admin_users')
       .select('user_id')
       .eq('user_id', user.id)
       .maybeSingle()
+
+    if (adminError) {
+      logger.middleware('Error checking admin status:', {
+        userId: user.id,
+        error: adminError.message,
+      })
+    }
 
     const isAdmin = !!adminCheck
     const isAdminRoute = pathname.startsWith('/admin')

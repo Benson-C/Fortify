@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { logDbOperation } from '@/lib/logger';
 
 export interface UserProfile {
   id: string;
@@ -22,6 +23,7 @@ export async function getUserProfile(): Promise<{ user: UserProfile | null; erro
       return { user: null, error: authError ? new Error(authError.message) : new Error('Not authenticated') };
     }
 
+    const startTime = Date.now();
     const { data: profile, error: profileError } = await supabase
       .from('users')
       .select('id, email, name, phone_number, id_number')
@@ -29,6 +31,14 @@ export async function getUserProfile(): Promise<{ user: UserProfile | null; erro
       .single();
 
     if (profileError || !profile) {
+      logDbOperation({
+        operation: 'select',
+        table: 'users',
+        userId: authUser.id,
+        query: { id: authUser.id },
+        error: profileError ? new Error(profileError.message) : new Error('Profile not found'),
+        duration: Date.now() - startTime,
+      });
       return { user: null, error: profileError ? new Error(profileError.message) : new Error('Profile not found') };
     }
 
@@ -52,11 +62,23 @@ export async function isAdmin(): Promise<boolean> {
     }
 
     // Check if user exists in admin_users table
+    const startTime = Date.now();
     const { data, error } = await supabase
       .from('admin_users')
       .select('user_id')
       .eq('user_id', user.id)
       .maybeSingle();
+
+    if (error) {
+      logDbOperation({
+        operation: 'select',
+        table: 'admin_users',
+        userId: user.id,
+        query: { user_id: user.id },
+        error: new Error(error.message),
+        duration: Date.now() - startTime,
+      });
+    }
 
     return !error && !!data;
   } catch (err) {

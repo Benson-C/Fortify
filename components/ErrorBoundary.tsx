@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { logger } from '@/lib/logger';
 
 interface Props {
   children: ReactNode;
@@ -35,19 +36,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log error with full context
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    logger.error('ErrorBoundary caught error:', {
+      error: error.message,
+      stack: error.stack,
+      name: error.name,
+      componentStack: errorInfo.componentStack,
+    });
     
     // Call optional error handler
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
-
-    // TODO: Replace with debug logger once logging infrastructure is set up
-    // logger.error('ErrorBoundary caught error', {
-    //   error: error.message,
-    //   stack: error.stack,
-    //   componentStack: errorInfo.componentStack,
-    // });
   }
 
   render() {
@@ -77,7 +76,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">Something went wrong</h1>
               <p className="text-gray-600 mb-6">
-                We're sorry, but something unexpected happened. Please try refreshing the page.
+                We&apos;re sorry, but something unexpected happened. Please try refreshing the page.
               </p>
               {this.state.error && process.env.NODE_ENV === 'development' && (
                 <details className="mt-4 text-left">
