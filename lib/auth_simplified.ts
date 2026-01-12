@@ -1,3 +1,6 @@
+// Simplified auth utilities using admin_users table instead of role field
+// Use this after running MIGRATE_TO_ADMIN_TABLE.sql
+
 import { createClient } from '@/lib/supabase/server';
 
 export interface UserProfile {
@@ -6,7 +9,7 @@ export interface UserProfile {
   name: string;
   phone_number: string | null;
   id_number: string | null;
-  // Note: role field removed - use isAdmin() to check admin status
+  // No role field needed!
 }
 
 /**
@@ -61,5 +64,26 @@ export async function isAdmin(): Promise<boolean> {
     return !error && !!data;
   } catch (err) {
     return false;
+  }
+}
+
+/**
+ * Get admin user IDs (for admin dashboard)
+ */
+export async function getAdminUserIds(): Promise<string[]> {
+  try {
+    const supabase = await createClient();
+    
+    const { data, error } = await supabase
+      .from('admin_users')
+      .select('user_id');
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(row => row.user_id);
+  } catch (err) {
+    return [];
   }
 }

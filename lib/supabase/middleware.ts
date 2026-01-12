@@ -70,15 +70,14 @@ export async function updateSession(request: NextRequest) {
 
   // If user is authenticated, check role-based routing
   if (user) {
-    // Get user role from database
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    // Check if user is admin using admin_users table
+    const { data: adminCheck } = await supabase
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle()
 
-    const userRole = userProfile?.role || 'participant'
-    const isAdmin = userRole === 'admin'
+    const isAdmin = !!adminCheck
     const isAdminRoute = pathname.startsWith('/admin')
     const isDashboardRoute = pathname.startsWith('/dashboard') || pathname === '/events'
 

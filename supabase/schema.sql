@@ -2,21 +2,33 @@
 create extension if not exists "uuid-ossp";
 
 -- Create custom types
-create type user_role as enum ('participant', 'admin');
+-- Note: user_role enum removed - admins are managed via admin_users table
 create type booking_status as enum ('confirmed', 'cancelled');
 create type event_type as enum ('cardio', 'strength', 'yoga', 'pilates', 'crossfit', 'other');
 
 -- Users table (extends Supabase auth.users)
+-- Note: No role field - all users are equal by default
+-- Admins are stored in admin_users table
 create table public.users (
   id uuid references auth.users on delete cascade primary key,
   email text unique not null,
   name text not null,
   phone_number text,
   id_number text,
-  role user_role default 'participant' not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Admin users table (separate from users to avoid RLS recursion)
+create table public.admin_users (
+  user_id uuid primary key references public.users(id) on delete cascade,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  created_by uuid references public.users(id),
+  notes text
+);
+
+-- Index for fast admin lookups
+create index idx_admin_users_user_id on public.admin_users(user_id);
 
 -- Events/Workshops table
 create table public.events (
@@ -87,19 +99,27 @@ create trigger set_updated_at_health_metrics
   for each row execute procedure public.handle_updated_at();
 
 -- Function to sync auth.users with public.users
+-- Note: No role field - admins are managed via admin_users table
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.users (id, email, name, phone_number, id_number, role)
+  insert into public.users (id, email, name, phone_number, id_number)
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data->>'name', ''),
+    coalesce(new.raw_user_meta_data->>'name', 'User'),
     nullif(new.raw_user_meta_data->>'phone_number', ''),
-    nullif(new.raw_user_meta_data->>'id_number', ''),
-    coalesce((new.raw_user_meta_data->>'role')::user_role, 'participant')
-  );
+    nullif(new.raw_user_meta_data->>'id_number', '')
+  )
+  on conflict (id) do nothing;  -- Prevent errors if profile already exists
   return new;
+exception
+  when others then
+    -- Log the error for debugging (check Supabase Postgres Logs)
+    raise warning 'Error in handle_new_user for user %: %', new.id, SQLERRM;
+    -- Still return new to allow auth.users creation to succeed
+    -- The fallback code in the app will handle profile creation if trigger fails
+    return new;
 end;
 $$ language plpgsql security definer;
 
@@ -112,9 +132,29 @@ create trigger on_auth_user_created
 
 -- Enable RLS on all tables
 alter table public.users enable row level security;
+alter table public.admin_users enable row level security;
 alter table public.events enable row level security;
 alter table public.bookings enable row level security;
 alter table public.health_metrics enable row level security;
+
+-- Admin users table policies
+create policy "Admins can view admin_users"
+  on public.admin_users for select
+  using (
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
+  );
+
+create policy "Admins can insert admin_users"
+  on public.admin_users for insert
+  with check (
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
+  );
+
+create policy "Admins can delete admin_users"
+  on public.admin_users for delete
+  using (
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
+  );
 
 -- Users policies
 create policy "Users can view their own profile"
@@ -127,15 +167,23 @@ create policy "Users can update their own profile"
 
 create policy "Users can insert their own profile"
   on public.users for insert
-  with check (auth.uid() = id);
+  with check (
+    -- Check if user exists in auth.users (more reliable than auth.uid() after signUp)
+    EXISTS (
+      SELECT 1 FROM auth.users 
+      WHERE auth.users.id = users.id
+    )
+    -- Prevent duplicates
+    AND NOT EXISTS (
+      SELECT 1 FROM public.users WHERE id = users.id
+    )
+  );
 
+-- Admin policies using admin_users table (no recursion!)
 create policy "Admins can view all users"
   on public.users for select
   using (
-    exists (
-      select 1 from public.users
-      where id = auth.uid() and role = 'admin'
-    )
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
   );
 
 -- Note: The trigger function handle_new_user() uses security definer
@@ -150,28 +198,19 @@ create policy "Anyone can view events"
 create policy "Admins can create events"
   on public.events for insert
   with check (
-    exists (
-      select 1 from public.users
-      where id = auth.uid() and role = 'admin'
-    )
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
   );
 
 create policy "Admins can update events"
   on public.events for update
   using (
-    exists (
-      select 1 from public.users
-      where id = auth.uid() and role = 'admin'
-    )
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
   );
 
 create policy "Admins can delete events"
   on public.events for delete
   using (
-    exists (
-      select 1 from public.users
-      where id = auth.uid() and role = 'admin'
-    )
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
   );
 
 -- Bookings policies
@@ -190,10 +229,7 @@ create policy "Users can update their own bookings"
 create policy "Admins can view all bookings"
   on public.bookings for select
   using (
-    exists (
-      select 1 from public.users
-      where id = auth.uid() and role = 'admin'
-    )
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
   );
 
 -- Health Metrics policies
@@ -212,10 +248,7 @@ create policy "Users can update their own health metrics"
 create policy "Admins can view all health metrics"
   on public.health_metrics for select
   using (
-    exists (
-      select 1 from public.users
-      where id = auth.uid() and role = 'admin'
-    )
+    EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
   );
 
 -- Indexes for better query performance
@@ -225,7 +258,7 @@ create index idx_bookings_status on public.bookings(status);
 create index idx_events_date_time on public.events(date_time);
 create index idx_health_metrics_user_id on public.health_metrics(user_id);
 create index idx_health_metrics_recorded_date on public.health_metrics(recorded_date);
-create index idx_users_role on public.users(role);
+-- Note: idx_users_role removed - no role field anymore
 
 -- Function to get current bookings count for an event
 create or replace function public.get_event_bookings_count(event_uuid uuid)

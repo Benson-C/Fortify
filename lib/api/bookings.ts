@@ -49,7 +49,7 @@ export async function getEventBookingCount(eventId: string): Promise<{ count: nu
   try {
     const supabase = await createClient();
 
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from('bookings')
       .select('id', { count: 'exact', head: true })
       .eq('event_id', eventId)
@@ -59,7 +59,7 @@ export async function getEventBookingCount(eventId: string): Promise<{ count: nu
       return { count: 0, error: new Error(error.message) };
     }
 
-    return { count: data?.length || 0, error: null };
+    return { count: count || 0, error: null };
   } catch (err) {
     return { count: 0, error: err instanceof Error ? err : new Error('Unknown error') };
   }
@@ -96,7 +96,7 @@ export async function isUserBooked(eventId: string): Promise<{ isBooked: boolean
 }
 
 /**
- * Create a booking for an event
+ * Create a booking for an event (uses atomic database function to prevent race conditions)
  */
 export async function createBooking(eventId: string): Promise<{ booking: Booking | null; error: Error | null }> {
   try {
@@ -107,42 +107,26 @@ export async function createBooking(eventId: string): Promise<{ booking: Booking
       return { booking: null, error: new Error('Not authenticated') };
     }
 
-    // Check if already booked
-    const { isBooked } = await isUserBooked(eventId);
-    if (isBooked) {
-      return { booking: null, error: new Error('You are already booked for this event') };
+    // Use atomic database function to prevent race conditions
+    const { data: result, error: functionError } = await supabase.rpc('create_booking_safe', {
+      p_user_id: user.id,
+      p_event_id: eventId,
+    });
+
+    if (functionError) {
+      return { booking: null, error: new Error(functionError.message) };
     }
 
-    // Check event capacity
-    const { data: event } = await supabase
-      .from('events')
-      .select('max_capacity, date_time')
-      .eq('id', eventId)
-      .single();
-
-    if (!event) {
-      return { booking: null, error: new Error('Event not found') };
+    if (!result || !result.success) {
+      return { 
+        booking: null, 
+        error: new Error(result?.error || 'Failed to create booking') 
+      };
     }
 
-    // Check if event is in the past
-    if (new Date(event.date_time) < new Date()) {
-      return { booking: null, error: new Error('Cannot book past events') };
-    }
-
-    // Get current booking count
-    const { count } = await getEventBookingCount(eventId);
-    if (count >= event.max_capacity) {
-      return { booking: null, error: new Error('Event is fully booked') };
-    }
-
-    // Create booking
-    const { data, error } = await supabase
+    // Fetch the created booking with event details
+    const { data: booking, error: fetchError } = await supabase
       .from('bookings')
-      .insert({
-        user_id: user.id,
-        event_id: eventId,
-        status: 'confirmed',
-      })
       .select(`
         *,
         events (
@@ -155,13 +139,14 @@ export async function createBooking(eventId: string): Promise<{ booking: Booking
           instructor_name
         )
       `)
+      .eq('id', result.booking_id)
       .single();
 
-    if (error) {
-      return { booking: null, error: new Error(error.message) };
+    if (fetchError || !booking) {
+      return { booking: null, error: new Error('Booking created but could not be retrieved') };
     }
 
-    return { booking: data as Booking, error: null };
+    return { booking: booking as Booking, error: null };
   } catch (err) {
     return { booking: null, error: err instanceof Error ? err : new Error('Unknown error') };
   }
@@ -225,6 +210,7 @@ export async function cancelBooking(bookingId: string): Promise<{ success: boole
 
 /**
  * Client-side function to create booking (for use in client components)
+ * Uses atomic database function to prevent race conditions
  */
 export async function createBookingClient(eventId: string): Promise<{ booking: Booking | null; error: Error | null }> {
   try {
@@ -235,53 +221,26 @@ export async function createBookingClient(eventId: string): Promise<{ booking: B
       return { booking: null, error: new Error('Not authenticated') };
     }
 
-    // Check if already booked
-    const { data: existing } = await supabase
+    // Use atomic database function to prevent race conditions
+    const { data: result, error: functionError } = await supabase.rpc('create_booking_safe', {
+      p_user_id: user.id,
+      p_event_id: eventId,
+    });
+
+    if (functionError) {
+      return { booking: null, error: new Error(functionError.message) };
+    }
+
+    if (!result || !result.success) {
+      return { 
+        booking: null, 
+        error: new Error(result?.error || 'Failed to create booking') 
+      };
+    }
+
+    // Fetch the created booking with event details
+    const { data: booking, error: fetchError } = await supabase
       .from('bookings')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('event_id', eventId)
-      .eq('status', 'confirmed')
-      .maybeSingle();
-
-    if (existing) {
-      return { booking: null, error: new Error('You are already booked for this event') };
-    }
-
-    // Get event to check capacity
-    const { data: event } = await supabase
-      .from('events')
-      .select('max_capacity, date_time')
-      .eq('id', eventId)
-      .single();
-
-    if (!event) {
-      return { booking: null, error: new Error('Event not found') };
-    }
-
-    if (new Date(event.date_time) < new Date()) {
-      return { booking: null, error: new Error('Cannot book past events') };
-    }
-
-    // Get booking count
-    const { count } = await supabase
-      .from('bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_id', eventId)
-      .eq('status', 'confirmed');
-
-    if ((count || 0) >= event.max_capacity) {
-      return { booking: null, error: new Error('Event is fully booked') };
-    }
-
-    // Create booking
-    const { data, error } = await supabase
-      .from('bookings')
-      .insert({
-        user_id: user.id,
-        event_id: eventId,
-        status: 'confirmed',
-      })
       .select(`
         *,
         events (
@@ -294,13 +253,14 @@ export async function createBookingClient(eventId: string): Promise<{ booking: B
           instructor_name
         )
       `)
+      .eq('id', result.booking_id)
       .single();
 
-    if (error) {
-      return { booking: null, error: new Error(error.message) };
+    if (fetchError || !booking) {
+      return { booking: null, error: new Error('Booking created but could not be retrieved') };
     }
 
-    return { booking: data as Booking, error: null };
+    return { booking: booking as Booking, error: null };
   } catch (err) {
     return { booking: null, error: err instanceof Error ? err : new Error('Unknown error') };
   }

@@ -103,7 +103,22 @@ export default function RegisterPage() {
           console.warn('[REGISTER] Profile not found, trigger may have failed');
           console.warn('[REGISTER] Profile error:', profileError);
           
-          // Step 6: Fallback - manually create profile
+          // Step 6: Wait a bit more and refresh session to ensure auth context is ready
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[REGISTER] Refreshing session before fallback insert...');
+          }
+          // Refresh session to ensure auth.uid() is available
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[REGISTER] Session data:', {
+              hasSession: !!sessionData.session,
+              userId: sessionData.session?.user?.id,
+              expectedId: data.user.id,
+            });
+          }
+          await new Promise(resolve => setTimeout(resolve, 500)); // Wait for session propagation
+          
+          // Step 7: Fallback - manually create profile
           if (process.env.NODE_ENV === 'development') {
             console.warn('[REGISTER] Attempting to create profile manually...');
           }
@@ -115,7 +130,7 @@ export default function RegisterPage() {
               name: validated.name,
               phone_number: validated.phone_number || null,
               id_number: validated.id_number || null,
-              role: 'participant',
+              // Note: No role field - admins are managed via admin_users table
             });
 
           if (insertError) {

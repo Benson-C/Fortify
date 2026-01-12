@@ -19,10 +19,17 @@ export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
   // Get statistics
-  const { count: totalParticipants } = await supabase
+  // Count all users (participants are users who aren't admins)
+  const { count: totalUsers } = await supabase
     .from('users')
-    .select('*', { count: 'exact', head: true })
-    .eq('role', 'participant');
+    .select('*', { count: 'exact', head: true });
+  
+  // Get admin count
+  const { count: adminCount } = await supabase
+    .from('admin_users')
+    .select('*', { count: 'exact', head: true });
+  
+  const totalParticipants = (totalUsers || 0) - (adminCount || 0);
 
   const { count: totalEvents } = await supabase
     .from('events')
@@ -40,13 +47,25 @@ export default async function AdminDashboardPage() {
     .order('created_at', { ascending: false })
     .limit(5);
 
-  // Get recent participants
-  const { data: recentParticipants } = await supabase
+  // Get recent participants (users who aren't admins)
+  // Get all users first, then filter out admins in code
+  const { data: allUsers } = await supabase
     .from('users')
     .select('id, name, email, created_at')
-    .eq('role', 'participant')
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(20); // Get more to account for filtering
+  
+  // Get admin IDs
+  const { data: adminUsers } = await supabase
+    .from('admin_users')
+    .select('user_id');
+  
+  const adminIds = new Set(adminUsers?.map(a => a.user_id) || []);
+  
+  // Filter out admins and limit to 5
+  const limitedParticipants = allUsers
+    ?.filter(user => !adminIds.has(user.id))
+    .slice(0, 5) || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -195,9 +214,9 @@ export default async function AdminDashboardPage() {
               View All →
             </Link>
           </div>
-          {recentParticipants && recentParticipants.length > 0 ? (
+          {limitedParticipants && limitedParticipants.length > 0 ? (
             <div className="space-y-4">
-              {recentParticipants.map((participant) => (
+              {limitedParticipants.map((participant) => (
                 <div key={participant.id} className="border-b border-gray-100 pb-5 last:border-b-0 last:pb-0 hover:bg-gray-50/50 -mx-2 px-3 py-2 rounded-lg transition-colors">
                   <h3 className="font-bold text-lg text-indigo-600 mb-1">{participant.name}</h3>
                   <p className="text-gray-600">{participant.email}</p>

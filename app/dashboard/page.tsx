@@ -11,11 +11,16 @@ export default async function DashboardPage() {
   }
 
   // Redirect admins to admin dashboard
-  if (user.role === 'admin') {
+  const supabase = await createClient();
+  const { data: adminCheck } = await supabase
+    .from('admin_users')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  
+  if (adminCheck) {
     redirect('/admin');
   }
-
-  const supabase = await createClient();
 
   // Get user's bookings
   const { data: bookings } = await supabase
