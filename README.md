@@ -139,6 +139,8 @@ cd /path/to/bennopi_webapp
 
 #### 3.3 Set Up Database Schema
 
+**📖 For complete Supabase setup instructions, see: [SUPABASE_DEPLOYMENT.md](./documentation/SUPABASE_DEPLOYMENT.md)**
+
 **What is a schema?** It's the structure of your database - it defines what tables exist and how they're organized.
 
 1. In your Supabase project dashboard, look at the **left sidebar**

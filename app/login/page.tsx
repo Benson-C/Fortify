@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { loginSchema, type LoginInput } from '@/lib/validations';
+import { logger, logAuthEvent } from '@/lib/logger';
+import { checkRateLimit, RateLimitPresets } from '@/lib/rate-limit';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,15 +16,33 @@ export default function LoginPage() {
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string>('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setStatus('');
     setLoading(true);
 
     try {
       const validated = loginSchema.parse(formData);
+      
+      // CRITICAL FIX #7: Rate limiting
+      const rateLimit = checkRateLimit(
+        `login:${validated.email}`,
+        RateLimitPresets.login.maxRequests,
+        RateLimitPresets.login.windowMs
+      );
+
+      if (rateLimit.limited) {
+        const resetMinutes = Math.ceil((rateLimit.resetAt - Date.now()) / 60000);
+        setError(`Too many login attempts. Please try again in ${resetMinutes} minute(s).`);
+        setLoading(false);
+        return;
+      }
+
       const supabase = createClient();
+      logAuthEvent({ event: 'login_attempt', email: validated.email });
 
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: validated.email,
@@ -30,23 +50,88 @@ export default function LoginPage() {
       });
 
       if (authError) {
-        setError(authError.message);
+        logAuthEvent({
+          event: 'login_failed',
+          email: validated.email,
+          error: new Error(authError.message),
+        });
+        // Generic error message to avoid information disclosure
+        setError('Invalid email or password. Please try again.');
         setLoading(false);
         return;
       }
 
-      if (data.user) {
-        router.push('/dashboard');
-        router.refresh();
+      if (!data.user) {
+        logAuthEvent({
+          event: 'login_no_user_data',
+          email: validated.email,
+        });
+        setError('Login failed. Please try again.');
+        setLoading(false);
+        return;
       }
+
+      // CRITICAL FIX #4: Check if profile exists, create if missing
+      setStatus('Verifying profile...');
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        // Profile missing - create it now using auth user metadata
+        logger.auth('Profile missing for user %s, creating...', data.user.id);
+        setStatus('Setting up profile...');
+        
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: data.user.id,
+            email: data.user.email!,
+            name: data.user.user_metadata?.name || 'User',
+            phone_number: data.user.user_metadata?.phone_number || null,
+            id_number: data.user.user_metadata?.id_number || null,
+          });
+
+        if (insertError) {
+          logAuthEvent({
+            event: 'login_profile_creation_failed',
+            email: validated.email,
+            userId: data.user.id,
+            error: new Error(insertError.message),
+          });
+          setError('Profile setup failed. Please contact support.');
+          setLoading(false);
+          return;
+        }
+        
+        logAuthEvent({
+          event: 'login_profile_created',
+          email: validated.email,
+          userId: data.user.id,
+        });
+      }
+
+      logAuthEvent({
+        event: 'login_success',
+        email: validated.email,
+        userId: data.user.id,
+      });
+
+      router.push('/dashboard');
+      router.refresh();
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('An unexpected error occurred');
-      }
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logAuthEvent({
+        event: 'login_error',
+        email: formData.email,
+        error,
+      });
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+      setStatus('');
     }
   };
 
@@ -61,6 +146,12 @@ export default function LoginPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-lg animate-slide-up">
             <p className="font-medium">{error}</p>
+          </div>
+        )}
+
+        {status && !error && (
+          <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-r-lg animate-slide-up">
+            <p className="font-medium">{status}</p>
           </div>
         )}
 
@@ -106,7 +197,7 @@ export default function LoginPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Signing in...
+                {status || 'Signing in...'}
               </span>
             ) : (
               'Sign In'

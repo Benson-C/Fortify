@@ -5,6 +5,47 @@ import { logger } from '@/lib/logger'
 // Module-level flag to log warning only once per server start
 let envWarningLogged = false
 
+// CRITICAL FIX #5: Cache admin status to avoid DB query on every request
+// Simple in-memory cache with TTL (5 minutes)
+interface AdminCacheEntry {
+  isAdmin: boolean
+  expiresAt: number
+}
+
+const adminCache = new Map<string, AdminCacheEntry>()
+const ADMIN_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+function getCachedAdminStatus(userId: string): boolean | null {
+  const entry = adminCache.get(userId)
+  if (!entry) {
+    return null
+  }
+  
+  if (Date.now() > entry.expiresAt) {
+    adminCache.delete(userId)
+    return null
+  }
+  
+  return entry.isAdmin
+}
+
+function setCachedAdminStatus(userId: string, isAdmin: boolean): void {
+  adminCache.set(userId, {
+    isAdmin,
+    expiresAt: Date.now() + ADMIN_CACHE_TTL,
+  })
+  
+  // Clean up expired entries periodically (every 10 minutes)
+  if (adminCache.size > 100) {
+    const now = Date.now()
+    for (const [key, entry] of adminCache.entries()) {
+      if (now > entry.expiresAt) {
+        adminCache.delete(key)
+      }
+    }
+  }
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -56,7 +97,11 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
-  const isPublicRoute = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/register')
+  const isPublicRoute = 
+    pathname === '/' || 
+    pathname.startsWith('/login') || 
+    pathname.startsWith('/register') ||
+    pathname.startsWith('/auth/callback')
 
   // If no user and trying to access protected route, redirect to login
   if (!user && !isPublicRoute) {
@@ -67,21 +112,34 @@ export async function updateSession(request: NextRequest) {
 
   // If user is authenticated, check role-based routing
   if (user) {
-    // Check if user is admin using admin_users table
-    const { data: adminCheck, error: adminError } = await supabase
-      .from('admin_users')
-      .select('user_id')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    // CRITICAL FIX #5: Check cache first to avoid DB query
+    let isAdmin: boolean
+    const cachedStatus = getCachedAdminStatus(user.id)
+    
+    if (cachedStatus !== null) {
+      isAdmin = cachedStatus
+      logger.middleware('Admin status from cache: %s', isAdmin)
+    } else {
+      // Cache miss - query database
+      const { data: adminCheck, error: adminError } = await supabase
+        .from('admin_users')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
 
-    if (adminError) {
-      logger.middleware('Error checking admin status:', {
-        userId: user.id,
-        error: adminError.message,
-      })
+      if (adminError) {
+        logger.middleware('Error checking admin status:', {
+          userId: user.id,
+          error: adminError.message,
+        })
+        // On error, assume not admin (fail secure)
+        isAdmin = false
+      } else {
+        isAdmin = !!adminCheck
+        // Cache the result
+        setCachedAdminStatus(user.id, isAdmin)
+      }
     }
-
-    const isAdmin = !!adminCheck
     const isAdminRoute = pathname.startsWith('/admin')
     const isDashboardRoute = pathname.startsWith('/dashboard') || pathname === '/events'
 

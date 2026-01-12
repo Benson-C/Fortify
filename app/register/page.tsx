@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { registerSchema, type RegisterInput } from '@/lib/validations';
+import { logger, logAuthEvent } from '@/lib/logger';
+import { checkRateLimit, getClientIP, RateLimitPresets } from '@/lib/rate-limit';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,10 +20,43 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string>('');
+
+  /**
+   * Poll for profile existence with exponential backoff
+   * Returns true if profile exists, false if not found after max attempts
+   */
+  async function waitForProfile(
+    supabase: ReturnType<typeof createClient>,
+    userId: string,
+    maxAttempts = 5
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', userId)
+        .single();
+
+      if (profile) {
+        logger.auth('Profile found after %d attempts', attempt + 1);
+        return true;
+      }
+
+      // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+      const delay = 100 * Math.pow(2, attempt);
+      if (attempt < maxAttempts - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    logger.auth('Profile not found after %d attempts', maxAttempts);
+    return false;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setStatus('');
 
     if (formData.password !== confirmPassword) {
       setError('Passwords do not match');
@@ -29,34 +64,40 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
+    setStatus('Validating form...');
 
     try {
-      // Debug logging (only in development)
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[REGISTER] Starting registration process...');
-        console.warn('[REGISTER] Form data:', { ...formData, password: '***' });
-      }
-      
-      // Step 1: Validate form data
+      // Step 1: Validate form data first
       const validated = registerSchema.parse(formData);
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[REGISTER] ✓ Form validation passed');
+      
+      // CRITICAL FIX #7: Rate limiting
+      // Note: In production, this should be done at the edge/server level
+      // Using email as key (IP-based rate limiting should be server-side)
+      const rateLimit = checkRateLimit(
+        `register:${validated.email}`,
+        RateLimitPresets.registration.maxRequests,
+        RateLimitPresets.registration.windowMs
+      );
+
+      if (rateLimit.limited) {
+        const resetMinutes = Math.ceil((rateLimit.resetAt - Date.now()) / 60000);
+        setError(`Too many registration attempts. Please try again in ${resetMinutes} minute(s).`);
+        setLoading(false);
+        return;
       }
+
+      logAuthEvent({ event: 'registration_started', email: validated.email });
+      setStatus('Creating account...');
       
       // Step 2: Create Supabase client
       const supabase = createClient();
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[REGISTER] ✓ Supabase client created');
-      }
 
-      // Step 3: Sign up user
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[REGISTER] Attempting to sign up user...');
-      }
+      // Step 3: Sign up user with email redirect URL
       const { data, error: authError } = await supabase.auth.signUp({
         email: validated.email,
         password: validated.password,
         options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             name: validated.name,
             phone_number: validated.phone_number || null,
@@ -66,117 +107,121 @@ export default function RegisterPage() {
       });
 
       if (authError) {
-        console.error('[REGISTER] ✗ Auth error:', {
-          message: authError.message,
-          status: authError.status,
-          name: authError.name,
+        logAuthEvent({
+          event: 'registration_failed',
+          email: validated.email,
+          error: new Error(authError.message),
         });
-        setError(`Registration failed: ${authError.message}`);
+        setError('Registration failed. Please try again.');
         setLoading(false);
         return;
       }
 
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[REGISTER] ✓ User signed up successfully');
-        console.warn('[REGISTER] User ID:', data.user?.id);
-        console.warn('[REGISTER] User email:', data.user?.email);
+      // CRITICAL FIX #1: Check if email verification is required
+      if (data.user && !data.session) {
+        // Email confirmation required
+        logAuthEvent({
+          event: 'registration_email_verification_required',
+          email: validated.email,
+          userId: data.user.id,
+        });
+        setStatus('');
+        setError(null);
+        setLoading(false);
+        // Redirect to verification page
+        router.push(`/register/verify-email?email=${encodeURIComponent(validated.email)}`);
+        return;
       }
 
-      if (data.user) {
-        // Step 4: Wait for database trigger to create profile
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[REGISTER] Waiting for database trigger to create profile...');
-        }
-        await new Promise(resolve => setTimeout(resolve, 500));
+      if (!data.user) {
+        logAuthEvent({
+          event: 'registration_no_user_data',
+          email: validated.email,
+        });
+        setError('Registration failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      logAuthEvent({
+        event: 'registration_user_created',
+        email: validated.email,
+        userId: data.user.id,
+      });
+
+      // Step 4: Wait for database trigger to create profile (with polling)
+      setStatus('Setting up your profile...');
+      const profileExists = await waitForProfile(supabase, data.user.id);
+
+      if (!profileExists) {
+        setStatus('Creating profile...');
         
-        // Step 5: Check if profile exists
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[REGISTER] Checking if user profile exists...');
-        }
-        const { data: profile, error: profileError } = await supabase
+        // Refresh session to ensure auth.uid() is available
+        await supabase.auth.refreshSession();
+        
+        // Final check before fallback insert
+        const { data: finalCheck } = await supabase
           .from('users')
           .select('id')
           .eq('id', data.user.id)
           .single();
 
-        if (profileError || !profile) {
-          console.warn('[REGISTER] Profile not found, trigger may have failed');
-          console.warn('[REGISTER] Profile error:', profileError);
-          
-          // Step 6: Wait a bit more and refresh session to ensure auth context is ready
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[REGISTER] Refreshing session before fallback insert...');
-          }
-          // Refresh session to ensure auth.uid() is available
-          const { data: sessionData } = await supabase.auth.getSession();
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[REGISTER] Session data:', {
-              hasSession: !!sessionData.session,
-              userId: sessionData.session?.user?.id,
-              expectedId: data.user.id,
-            });
-          }
-          await new Promise(resolve => setTimeout(resolve, 500)); // Wait for session propagation
-          
-          // Step 7: Fallback - manually create profile
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[REGISTER] Attempting to create profile manually...');
-          }
+        if (!finalCheck) {
+          // Fallback - manually create profile using auth user metadata
+          const { data: { user: authUser } } = await supabase.auth.getUser();
           const { error: insertError } = await supabase
             .from('users')
             .insert({
               id: data.user.id,
-              email: validated.email,
-              name: validated.name,
-              phone_number: validated.phone_number || null,
-              id_number: validated.id_number || null,
-              // Note: No role field - admins are managed via admin_users table
+              email: data.user.email!,
+              name: authUser?.user_metadata?.name || validated.name,
+              phone_number: authUser?.user_metadata?.phone_number || validated.phone_number || null,
+              id_number: authUser?.user_metadata?.id_number || validated.id_number || null,
             });
 
           if (insertError) {
-            console.error('[REGISTER] ✗ Failed to create user profile:', {
-              message: insertError.message,
-              details: insertError.details,
-              hint: insertError.hint,
-              code: insertError.code,
+            logAuthEvent({
+              event: 'registration_profile_creation_failed',
+              email: validated.email,
+              userId: data.user.id,
+              error: new Error(insertError.message),
             });
-            setError(`Account created but profile setup failed: ${insertError.message}. Please contact support.`);
+            setError('Account created but profile setup failed. Please contact support.');
             setLoading(false);
             return;
           }
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[REGISTER] ✓ Profile created manually');
-          }
-        } else {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[REGISTER] ✓ Profile exists (created by trigger)');
-          }
+          
+          logAuthEvent({
+            event: 'registration_profile_created_fallback',
+            email: validated.email,
+            userId: data.user.id,
+          });
         }
+      }
 
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[REGISTER] ✓ Registration complete, redirecting to dashboard...');
-        }
-        router.push('/dashboard');
-        router.refresh();
-      } else {
-        console.error('[REGISTER] ✗ No user data returned from signUp');
-        setError('Registration failed: No user data returned');
-      }
+      // CRITICAL FIX #8: Explicitly refresh session before redirect
+      setStatus('Finalizing...');
+      await supabase.auth.refreshSession();
+
+      logAuthEvent({
+        event: 'registration_completed',
+        email: validated.email,
+        userId: data.user.id,
+      });
+
+      router.push('/dashboard');
+      router.refresh();
     } catch (err) {
-      console.error('[REGISTER] ✗ Unexpected error:', err);
-      if (err instanceof Error) {
-        console.error('[REGISTER] Error details:', {
-          message: err.message,
-          stack: err.stack,
-          name: err.name,
-        });
-        setError(err.message);
-      } else {
-        console.error('[REGISTER] Unknown error type:', typeof err, err);
-        setError('An unexpected error occurred. Check console for details.');
-      }
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logAuthEvent({
+        event: 'registration_error',
+        email: formData.email,
+        error,
+      });
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+      setStatus('');
     }
   };
 
@@ -191,6 +236,12 @@ export default function RegisterPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-lg animate-slide-up">
             <p className="font-medium">{error}</p>
+          </div>
+        )}
+
+        {status && !error && (
+          <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-r-lg animate-slide-up">
+            <p className="font-medium">{status}</p>
           </div>
         )}
 
@@ -265,9 +316,9 @@ export default function RegisterPage() {
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-gray-900"
-              placeholder="Minimum 6 characters"
+              placeholder="At least 8 characters with uppercase, lowercase, number, and special character"
               required
-              minLength={6}
+              minLength={8}
             />
           </div>
 
@@ -297,7 +348,7 @@ export default function RegisterPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Creating account...
+                {status || 'Creating account...'}
               </span>
             ) : (
               'Create Account'

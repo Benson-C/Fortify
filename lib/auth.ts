@@ -62,6 +62,7 @@ export async function isAdmin(): Promise<boolean> {
     }
 
     // Check if user exists in admin_users table
+    // Use the "Users can check own admin status" policy (user_id = auth.uid())
     const startTime = Date.now();
     const { data, error } = await supabase
       .from('admin_users')
