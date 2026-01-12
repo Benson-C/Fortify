@@ -6,15 +6,29 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { Booking } from '@/lib/api/types';
 
+interface Event {
+  id: string;
+  title: string;
+  description: string | null;
+  date_time: string;
+  max_capacity: number;
+  event_type: string;
+  duration: number;
+  location: string | null;
+  instructor_name: string | null;
+}
+
 export default function BookingsPage() {
   const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [bookingCounts, setBookingCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadBookings() {
+    async function loadData() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -23,7 +37,8 @@ export default function BookingsPage() {
         return;
       }
 
-      const { data, error: fetchError } = await supabase
+      // Load user's bookings
+      const { data: bookingsData, error: fetchError } = await supabase
         .from('bookings')
         .select(`
           *,
@@ -46,11 +61,44 @@ export default function BookingsPage() {
         return;
       }
 
-      setBookings((data || []) as Booking[]);
+      setBookings((bookingsData || []) as Booking[]);
+
+      // Load upcoming events
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('events')
+        .select('*')
+        .gte('date_time', new Date().toISOString())
+        .order('date_time', { ascending: true });
+
+      if (eventsError) {
+        setError(eventsError.message);
+        setLoading(false);
+        return;
+      }
+
+      setEvents(eventsData || []);
+
+      // Get booking counts for all events
+      const eventIds = eventsData?.map(e => e.id) || [];
+      if (eventIds.length > 0) {
+        const { data: bookingCountsData } = await supabase
+          .from('bookings')
+          .select('event_id')
+          .in('event_id', eventIds)
+          .eq('status', 'confirmed');
+
+        const countsMap = new Map<string, number>();
+        bookingCountsData?.forEach((booking) => {
+          const current = countsMap.get(booking.event_id) || 0;
+          countsMap.set(booking.event_id, current + 1);
+        });
+        setBookingCounts(countsMap);
+      }
+
       setLoading(false);
     }
 
-    loadBookings();
+    loadData();
   }, [router]);
 
   const handleCancel = async (bookingId: string) => {
@@ -145,6 +193,32 @@ export default function BookingsPage() {
 
   const cancelledBookings = bookings.filter(b => b.status === 'cancelled');
 
+  // Get booked event IDs to filter them out from available events
+  const bookedEventIds = new Set(
+    bookings
+      .filter(b => b.status === 'confirmed')
+      .map(b => (b.events as any)?.id)
+      .filter(Boolean)
+  );
+
+  // Filter events to only show ones user hasn't booked
+  const availableEvents = events.filter(e => !bookedEventIds.has(e.id));
+
+  // Function to get border color based on availability
+  const getBorderColor = (event: Event) => {
+    const count = bookingCounts.get(event.id) || 0;
+    const spotsRemaining = event.max_capacity - count;
+    const availabilityPercent = (spotsRemaining / event.max_capacity) * 100;
+
+    if (availabilityPercent > 50) {
+      return 'border-green-400'; // Green: plenty of spots
+    } else if (availabilityPercent > 25) {
+      return 'border-yellow-400'; // Yellow: getting full
+    } else {
+      return 'border-red-400'; // Red: almost full or full
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="container mx-auto px-4 py-8">
@@ -162,6 +236,63 @@ export default function BookingsPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
             {error}
+          </div>
+        )}
+
+        {/* Available Events for Booking */}
+        {availableEvents.length > 0 && (
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft p-8 mb-8 border border-gray-100">
+            <h2 className="text-2xl font-bold mb-6 text-indigo-600">Available Events</h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {availableEvents.map((event) => {
+                const bookingCount = bookingCounts.get(event.id) || 0;
+                const spotsRemaining = event.max_capacity - bookingCount;
+                const eventDate = new Date(event.date_time);
+                const borderColor = getBorderColor(event);
+
+                return (
+                  <div
+                    key={event.id}
+                    className={`bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft p-6 hover:shadow-soft-lg transition-all duration-300 border-2 ${borderColor} hover:border-opacity-80 transform hover:-translate-y-1`}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-xl font-bold text-indigo-600 pr-2">{event.title}</h3>
+                      <span className="px-3 py-1 text-xs font-bold rounded-full bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 border border-indigo-200">
+                        {event.event_type}
+                      </span>
+                    </div>
+
+                    {event.description && (
+                      <p className="text-gray-600 mb-4 line-clamp-2">{event.description}</p>
+                    )}
+
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center text-gray-600">
+                        <span className="font-medium mr-2">Date:</span>
+                        <span>{eventDate.toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center text-gray-600">
+                        <span className="font-medium mr-2">Time:</span>
+                        <span>{eventDate.toLocaleTimeString()}</span>
+                      </div>
+                      <div className="flex items-center text-gray-600">
+                        <span className="font-medium mr-2">Capacity:</span>
+                        <span>
+                          {bookingCount}/{event.max_capacity} spots filled
+                        </span>
+                      </div>
+                    </div>
+
+                    <Link
+                      href={`/events/book/${event.id}`}
+                      className="block w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-3 rounded-xl text-center hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 font-semibold shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 transform hover:-translate-y-0.5"
+                    >
+                      Book Now
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
