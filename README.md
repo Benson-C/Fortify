@@ -353,25 +353,26 @@ bennopi_webapp/
 
 ## Production Deployment
 
+### Deploy to Vercel
+
+For detailed deployment instructions, see **[DEPLOYMENT.md](./DEPLOYMENT.md)**.
+
+**Quick Start:**
+1. Push your code to GitHub
+2. Import project in [Vercel](https://vercel.com)
+3. Add environment variables in Vercel Settings
+4. Deploy!
+
+**Required Environment Variables in Vercel:**
+- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anon key
+- `NEXT_PUBLIC_APP_URL` - Your Vercel deployment URL (optional)
+
 ### Build for Production
 
 ```bash
 npm run build
 ```
-
-### Environment Variables in Production
-
-Set environment variables in your hosting platform:
-
-- **Vercel**: Project Settings → Environment Variables
-- **Netlify**: Site Settings → Environment Variables
-- **Other platforms**: Check their documentation
-
-Required variables:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (server-side only)
-- `NEXT_PUBLIC_APP_URL` (your production URL)
 
 ### Security Notes
 
@@ -380,12 +381,29 @@ Required variables:
 - ✅ Use `NEXT_PUBLIC_*` prefix only for variables needed in the browser
 - ✅ Keep service role key server-side only
 
+### Other Hosting Platforms
+
+- **Netlify**: Similar to Vercel, set environment variables in Site Settings
+- **Railway**: Set environment variables in project settings
+- **AWS/DigitalOcean**: Configure environment variables in your hosting platform's dashboard
+
+## Deployment
+
+For detailed deployment instructions to Vercel, see **[DEPLOYMENT.md](./DEPLOYMENT.md)**.
+
+**Quick Deploy:**
+1. Push code to GitHub
+2. Import project in [Vercel](https://vercel.com)
+3. Add environment variables
+4. Deploy!
+
 ## Additional Resources
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Supabase Documentation](https://supabase.com/docs)
 - [Tailwind CSS Documentation](https://tailwindcss.com/docs)
 - [TypeScript Documentation](https://www.typescriptlang.org/docs/)
+- [Vercel Deployment Guide](./DEPLOYMENT.md)
 
 ## Support
 

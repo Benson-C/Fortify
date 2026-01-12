@@ -31,9 +31,28 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
+      // Debug logging (only in development)
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[REGISTER] Starting registration process...');
+        console.warn('[REGISTER] Form data:', { ...formData, password: '***' });
+      }
+      
+      // Step 1: Validate form data
       const validated = registerSchema.parse(formData);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[REGISTER] ✓ Form validation passed');
+      }
+      
+      // Step 2: Create Supabase client
       const supabase = createClient();
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[REGISTER] ✓ Supabase client created');
+      }
 
+      // Step 3: Sign up user
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[REGISTER] Attempting to sign up user...');
+      }
       const { data, error: authError } = await supabase.auth.signUp({
         email: validated.email,
         password: validated.password,
@@ -47,20 +66,99 @@ export default function RegisterPage() {
       });
 
       if (authError) {
-        setError(authError.message);
+        console.error('[REGISTER] ✗ Auth error:', {
+          message: authError.message,
+          status: authError.status,
+          name: authError.name,
+        });
+        setError(`Registration failed: ${authError.message}`);
         setLoading(false);
         return;
       }
 
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[REGISTER] ✓ User signed up successfully');
+        console.warn('[REGISTER] User ID:', data.user?.id);
+        console.warn('[REGISTER] User email:', data.user?.email);
+      }
+
       if (data.user) {
+        // Step 4: Wait for database trigger to create profile
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[REGISTER] Waiting for database trigger to create profile...');
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Step 5: Check if profile exists
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[REGISTER] Checking if user profile exists...');
+        }
+        const { data: profile, error: profileError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError || !profile) {
+          console.warn('[REGISTER] Profile not found, trigger may have failed');
+          console.warn('[REGISTER] Profile error:', profileError);
+          
+          // Step 6: Fallback - manually create profile
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[REGISTER] Attempting to create profile manually...');
+          }
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({
+              id: data.user.id,
+              email: validated.email,
+              name: validated.name,
+              phone_number: validated.phone_number || null,
+              id_number: validated.id_number || null,
+              role: 'participant',
+            });
+
+          if (insertError) {
+            console.error('[REGISTER] ✗ Failed to create user profile:', {
+              message: insertError.message,
+              details: insertError.details,
+              hint: insertError.hint,
+              code: insertError.code,
+            });
+            setError(`Account created but profile setup failed: ${insertError.message}. Please contact support.`);
+            setLoading(false);
+            return;
+          }
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[REGISTER] ✓ Profile created manually');
+          }
+        } else {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[REGISTER] ✓ Profile exists (created by trigger)');
+          }
+        }
+
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[REGISTER] ✓ Registration complete, redirecting to dashboard...');
+        }
         router.push('/dashboard');
         router.refresh();
+      } else {
+        console.error('[REGISTER] ✗ No user data returned from signUp');
+        setError('Registration failed: No user data returned');
       }
     } catch (err) {
+      console.error('[REGISTER] ✗ Unexpected error:', err);
       if (err instanceof Error) {
+        console.error('[REGISTER] Error details:', {
+          message: err.message,
+          stack: err.stack,
+          name: err.name,
+        });
         setError(err.message);
       } else {
-        setError('An unexpected error occurred');
+        console.error('[REGISTER] Unknown error type:', typeof err, err);
+        setError('An unexpected error occurred. Check console for details.');
       }
     } finally {
       setLoading(false);
@@ -91,7 +189,7 @@ export default function RegisterPage() {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-gray-900"
               placeholder="John Doe"
               required
             />
@@ -106,7 +204,7 @@ export default function RegisterPage() {
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-gray-900"
               placeholder="you@example.com"
               required
             />
@@ -122,7 +220,7 @@ export default function RegisterPage() {
                 type="tel"
                 value={formData.phone_number}
                 onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-gray-900"
                 placeholder="+1 (555) 000-0000"
               />
             </div>
@@ -136,7 +234,7 @@ export default function RegisterPage() {
                 type="text"
                 value={formData.id_number}
                 onChange={(e) => setFormData({ ...formData, id_number: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-gray-900"
                 placeholder="Optional"
               />
             </div>
@@ -151,7 +249,7 @@ export default function RegisterPage() {
               type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-gray-900"
               placeholder="Minimum 6 characters"
               required
               minLength={6}
@@ -167,7 +265,7 @@ export default function RegisterPage() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-gray-900"
               placeholder="Re-enter password"
               required
             />

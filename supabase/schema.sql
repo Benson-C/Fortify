@@ -95,8 +95,8 @@ begin
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'name', ''),
-    new.raw_user_meta_data->>'phone_number',
-    new.raw_user_meta_data->>'id_number',
+    nullif(new.raw_user_meta_data->>'phone_number', ''),
+    nullif(new.raw_user_meta_data->>'id_number', ''),
     coalesce((new.raw_user_meta_data->>'role')::user_role, 'participant')
   );
   return new;
@@ -125,6 +125,10 @@ create policy "Users can update their own profile"
   on public.users for update
   using (auth.uid() = id);
 
+create policy "Users can insert their own profile"
+  on public.users for insert
+  with check (auth.uid() = id);
+
 create policy "Admins can view all users"
   on public.users for select
   using (
@@ -133,6 +137,10 @@ create policy "Admins can view all users"
       where id = auth.uid() and role = 'admin'
     )
   );
+
+-- Note: The trigger function handle_new_user() uses security definer
+-- which bypasses RLS. However, if the trigger fails (e.g., on localhost),
+-- the INSERT policy above allows users to create their own profile as a fallback.
 
 -- Events policies
 create policy "Anyone can view events"
