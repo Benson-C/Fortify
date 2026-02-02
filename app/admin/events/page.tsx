@@ -517,7 +517,7 @@ export default function AdminEventsPage() {
                         id="eventName"
                         value={eventName}
                         onChange={(e) => setEventName(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
                         placeholder="e.g., Morning Session"
                         required
                       />
@@ -532,7 +532,7 @@ export default function AdminEventsPage() {
                           id="eventDate"
                           value={eventDate}
                           onChange={(e) => setEventDate(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
                           required
                         />
                       </div>
@@ -545,7 +545,7 @@ export default function AdminEventsPage() {
                           id="eventTime"
                           value={eventTime}
                           onChange={(e) => setEventTime(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
                           required
                         />
                       </div>
@@ -559,7 +559,7 @@ export default function AdminEventsPage() {
                         value={eventDescription}
                         onChange={(e) => setEventDescription(e.target.value)}
                         rows={3}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-white text-gray-900"
                         placeholder="Describe the event..."
                       />
                     </div>
@@ -591,7 +591,7 @@ export default function AdminEventsPage() {
                         value={maxParticipants}
                         onChange={(e) => setMaxParticipants(e.target.value)}
                         min={1}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
                         placeholder="e.g., 20"
                         required
                       />
@@ -620,7 +620,7 @@ export default function AdminEventsPage() {
                               id="recurrenceEndDate"
                               value={recurrenceEndDate}
                               onChange={(e) => setRecurrenceEndDate(e.target.value)}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
                             />
                           </div>
                           <div>

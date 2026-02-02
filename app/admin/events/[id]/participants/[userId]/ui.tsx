@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -24,6 +24,31 @@ function parseNumber(v: string): number | null {
   const n = Number(trimmed);
   return Number.isFinite(n) ? n : null;
 }
+
+const NumberField = React.memo(({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) => (
+  <div className="py-3 border-b border-gray-100 last:border-b-0">
+    <label className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
+    <input
+      type="number"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white text-gray-900"
+      placeholder={placeholder}
+    />
+  </div>
+));
+
+NumberField.displayName = 'NumberField';
 
 export default function AdminParticipantDataEntry({
   eventId,
@@ -145,28 +170,6 @@ export default function AdminParticipantDataEntry({
     </div>
   );
 
-  const NumberField = ({
-    label,
-    value,
-    onChange,
-    placeholder,
-  }: {
-    label: string;
-    value: string;
-    onChange: (v: string) => void;
-    placeholder?: string;
-  }) => (
-    <div className="py-3 border-b border-gray-100 last:border-b-0">
-      <label className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-gray-900"
-        placeholder={placeholder}
-      />
-    </div>
-  );
 
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft p-6 border border-gray-100">
