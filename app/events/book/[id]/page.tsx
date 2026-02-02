@@ -86,12 +86,29 @@ export default function BookEventPage() {
     setBooking(true);
     setError(null);
 
-    // Use the API function which enforces single booking restrictions
-    const { createBookingClient } = await import('@/lib/api/bookings');
-    const { booking, error: bookingError } = await createBookingClient(eventId);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (bookingError || !booking) {
-      setError(bookingError?.message || 'Failed to create booking');
+    if (!user) {
+      setError('Not authenticated');
+      setBooking(false);
+      return;
+    }
+
+    // Use the database function which enforces single booking restrictions
+    const { data: result, error: functionError } = await supabase.rpc('create_booking_safe', {
+      p_user_id: user.id,
+      p_event_id: eventId,
+    });
+
+    if (functionError) {
+      setError(functionError.message);
+      setBooking(false);
+      return;
+    }
+
+    if (!result || !result.success) {
+      setError(result?.error || 'Failed to create booking');
       setBooking(false);
       return;
     }
