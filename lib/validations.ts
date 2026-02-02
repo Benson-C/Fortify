@@ -24,7 +24,17 @@ export const eventSchema = z.object({
   date_time: z.string().datetime('Invalid date/time'),
   duration: z.number().int().positive('Duration must be a positive number'),
   max_capacity: z.number().int().positive('Max capacity must be a positive number'),
-  event_type: z.enum(['cardio', 'strength', 'yoga', 'pilates', 'crossfit', 'other']),
+  event_type: z.enum([
+    'cardio',
+    'strength',
+    'yoga',
+    'pilates',
+    'crossfit',
+    'other',
+    'fun_assessment_day',
+    'dexa_scan',
+    'touchpoints',
+  ]),
   location: z.string().optional(),
   instructor_name: z.string().optional(),
 });

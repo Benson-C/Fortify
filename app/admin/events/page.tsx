@@ -33,6 +33,7 @@ export default function AdminEventsPage() {
   const [eventTime, setEventTime] = useState('');
   const [eventDescription, setEventDescription] = useState('');
   const [maxParticipants, setMaxParticipants] = useState('');
+  const [eventType, setEventType] = useState<'fun_assessment_day' | 'dexa_scan' | 'touchpoints'>('fun_assessment_day');
 
   useEffect(() => {
     async function checkAuthAndLoad() {
@@ -182,7 +183,7 @@ export default function AdminEventsPage() {
         date_time: dateTime.toISOString(),
         max_capacity: maxParticipantsNum,
         duration: 60, // Default duration of 60 minutes
-        event_type: 'other', // Default event type
+        event_type: eventType,
         location: null,
         instructor_name: null,
       });
@@ -199,6 +200,7 @@ export default function AdminEventsPage() {
     setEventTime('');
     setEventDescription('');
     setMaxParticipants('');
+    setEventType('fun_assessment_day');
     setShowForm(false);
 
     // Reload events and favorites
@@ -337,6 +339,23 @@ export default function AdminEventsPage() {
               </div>
 
               <div>
+                <label htmlFor="eventType" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Event Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="eventType"
+                  value={eventType}
+                  onChange={(e) => setEventType(e.target.value as any)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white"
+                  required
+                >
+                  <option value="fun_assessment_day">FUN/Assessment Day</option>
+                  <option value="dexa_scan">DEXA Scan</option>
+                  <option value="touchpoints">Touchpoints</option>
+                </select>
+              </div>
+
+              <div>
                 <label htmlFor="maxParticipants" className="block text-sm font-semibold text-gray-700 mb-2">
                   Max Participants <span className="text-red-500">*</span>
                 </label>
@@ -369,6 +388,7 @@ export default function AdminEventsPage() {
                     setEventTime('');
                     setEventDescription('');
                     setMaxParticipants('');
+                    setEventType('fun_assessment_day');
                     setError(null);
                   }}
                   className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all duration-300"
@@ -397,7 +417,12 @@ export default function AdminEventsPage() {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-bold text-lg text-indigo-600">{event.title}</h3>
+                          <Link
+                            href={`/admin/events/${event.id}`}
+                            className="font-bold text-lg text-indigo-600 hover:underline"
+                          >
+                            {event.title}
+                          </Link>
                           <button
                             onClick={() => handleToggleFavorite(event.id)}
                             className="p-1 hover:bg-yellow-50 rounded transition-colors"
