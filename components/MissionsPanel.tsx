@@ -6,9 +6,9 @@ interface MissionsPanelProps {
 }
 
 export default function MissionsPanel({ missions }: MissionsPanelProps) {
-  // Filter missions to show only unlocked ones (except mission 4 which always shows)
+  // Filter missions to show only unlocked ones (except mission 5 which always shows)
   const visibleMissions = missions.filter(
-    (mission) => !mission.isLocked || mission.id === 4
+    (mission) => !mission.isLocked || mission.id === 5
   );
 
   if (visibleMissions.length === 0) {
@@ -57,7 +57,7 @@ export default function MissionsPanel({ missions }: MissionsPanelProps) {
 
       <div className="space-y-4">
         {visibleMissions.map((mission) => {
-          const isGreyedOut = mission.isLocked && mission.id === 4;
+          const isGreyedOut = mission.isLocked && mission.id === 5;
           
           return (
             <div

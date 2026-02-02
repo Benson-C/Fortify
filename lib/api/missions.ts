@@ -103,28 +103,35 @@ export async function getUserMissions(userId: string): Promise<Mission[]> {
         : 'not_started'
       : 'not_started';
 
-  // Mission 3: 9 Touchpoints & 1 FUN/Assessment Day (after mission 2 is completed)
-  // Users can book any of these 10 events (any combination of touchpoints and FUN assessment days)
-  // Count completed touchpoints and FUN assessment days (excluding mission 1)
+  // Mission 3a: 9 Touchpoints (after mission 2 is completed)
   const completedTouchpoints = touchpointEvents.filter((e) => e.hasAttendance).length;
-  const completedFunAfterMission1 = funAssessmentEvents
-    .slice(1)
-    .filter((e) => e.hasAttendance).length;
-  const totalCompleted = completedTouchpoints + completedFunAfterMission1;
+  const totalTouchpointsBooked = touchpointEvents.length;
   
-  // Count total bookings (for progress display)
-  const totalBooked = touchpointEvents.length + Math.max(0, funAssessmentEvents.length - 1);
-  
-  const mission3Status: MissionStatus =
+  const mission3aStatus: MissionStatus =
     mission2Status === 'completed'
-      ? totalCompleted >= 10
+      ? completedTouchpoints >= 9
         ? 'completed'
-        : totalBooked > 0
+        : totalTouchpointsBooked > 0
           ? 'incomplete'
           : 'not_started'
       : 'not_started';
 
-  // Mission 4: Post 3 months FUN/Assessment Day
+  // Mission 3b: FUN/Assessment Day (after mission 2 is completed, excluding mission 1)
+  const completedFunAfterMission1 = funAssessmentEvents
+    .slice(1)
+    .filter((e) => e.hasAttendance).length;
+  const totalFunAfterMission1Booked = Math.max(0, funAssessmentEvents.length - 1);
+  
+  const mission3bStatus: MissionStatus =
+    mission2Status === 'completed'
+      ? completedFunAfterMission1 >= 1
+        ? 'completed'
+        : totalFunAfterMission1Booked > 0
+          ? 'incomplete'
+          : 'not_started'
+      : 'not_started';
+
+  // Mission 5: Post 3 months FUN/Assessment Day
   // This is mandatory and shows up but greyed out until 3 months after mission 1
   const mission1Date = mission1Event?.dateTime;
   // Calculate 3 months later (approximately 91 days, but using months for accuracy)
@@ -136,14 +143,14 @@ export async function getUserMissions(userId: string): Promise<Mission[]> {
       })()
     : null;
   const now = new Date();
-  const isMission4Unlocked = mission1Date && now >= threeMonthsLater;
+  const isMission5Unlocked = mission1Date !== undefined && threeMonthsLater !== null && now >= threeMonthsLater;
 
   // Find the post-3-months FUN assessment day event
-  const mission4Event = isMission4Unlocked
+  const mission5Event = isMission5Unlocked && threeMonthsLater
     ? funAssessmentEvents.find((e) => e.dateTime >= threeMonthsLater && e.hasAttendance)
     : null;
-  const mission4Status: MissionStatus = isMission4Unlocked
-    ? mission4Event
+  const mission5Status: MissionStatus = isMission5Unlocked && threeMonthsLater
+    ? mission5Event
       ? 'completed'
       : funAssessmentEvents.some((e) => e.dateTime >= threeMonthsLater)
         ? 'incomplete'
@@ -167,18 +174,26 @@ export async function getUserMissions(userId: string): Promise<Mission[]> {
     },
     {
       id: 3,
-      title: '9 Touchpoints & FUN/Assessment Day',
-      description: 'Complete 9 touchpoints and 1 additional FUN/Assessment Day',
-      status: mission3Status,
+      title: '9 Touchpoints',
+      description: 'Complete 9 touchpoint sessions',
+      status: mission3aStatus,
       isLocked: mission2Status !== 'completed',
-      progress: mission3Status !== 'not_started' ? `${totalCompleted}/10 completed (${totalBooked} booked)` : undefined,
+      progress: mission3aStatus !== 'not_started' ? `${completedTouchpoints}/9 completed (${totalTouchpointsBooked} booked)` : undefined,
     },
     {
       id: 4,
+      title: 'FUN/Assessment Day',
+      description: 'Complete 1 additional FUN/Assessment Day (after your first one)',
+      status: mission3bStatus,
+      isLocked: mission2Status !== 'completed',
+      progress: mission3bStatus !== 'not_started' ? `${completedFunAfterMission1}/1 completed (${totalFunAfterMission1Booked} booked)` : undefined,
+    },
+    {
+      id: 5,
       title: 'Post 3 Months FUN/Assessment Day',
       description: 'Complete your 3-month follow-up assessment',
-      status: mission4Status,
-      isLocked: !isMission4Unlocked,
+      status: mission5Status,
+      isLocked: !isMission5Unlocked,
       unlockDate: threeMonthsLater || undefined,
     },
   ];
