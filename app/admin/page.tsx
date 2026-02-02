@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getUserProfile, isAdmin } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import AdminFavouritesPanel from '@/components/AdminFavouritesPanel';
 
 export default async function AdminDashboardPage() {
   const { user, error } = await getUserProfile();
@@ -77,6 +78,9 @@ export default async function AdminDashboardPage() {
           </h1>
           <p className="text-lg text-gray-600">Manage events, participants, and view analytics</p>
         </div>
+
+        {/* Favourites Panel */}
+        <AdminFavouritesPanel />
 
         {/* Statistics Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-10">

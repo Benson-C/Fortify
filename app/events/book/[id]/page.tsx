@@ -25,8 +25,10 @@ export default function BookEventPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [bookingCount, setBookingCount] = useState(0);
   const [isBooked, setIsBooked] = useState(false);
+  const [bookingId, setBookingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -69,6 +71,7 @@ export default function BookEventPage() {
           .maybeSingle();
 
         setIsBooked(!!existingBooking);
+        setBookingId(existingBooking?.id ?? null);
       }
 
       setLoading(false);
@@ -140,6 +143,74 @@ export default function BookEventPage() {
     router.refresh();
   };
 
+  const handleCancel = async () => {
+    if (!bookingId) return;
+    if (!confirm('Are you sure you want to cancel this booking?')) {
+      return;
+    }
+
+    setCancelling(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError('Not authenticated');
+      setCancelling(false);
+      return;
+    }
+
+    // Re-check 24-hour policy using authoritative event date
+    const { data: bookingRow } = await supabase
+      .from('bookings')
+      .select(
+        `
+        id,
+        status,
+        events (
+          date_time
+        )
+      `
+      )
+      .eq('id', bookingId)
+      .eq('user_id', user.id)
+      .eq('status', 'confirmed')
+      .single();
+
+    if (!bookingRow) {
+      setError('Booking not found');
+      setCancelling(false);
+      return;
+    }
+
+    const eventDate = new Date((bookingRow.events as any)?.date_time);
+    const hoursUntilEvent = (eventDate.getTime() - new Date().getTime()) / (1000 * 60 * 60);
+    if (hoursUntilEvent < 24) {
+      setError('Cancellations must be made at least 24 hours before the event');
+      setCancelling(false);
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('bookings')
+      .update({ status: 'cancelled' })
+      .eq('id', bookingId)
+      .eq('user_id', user.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      setCancelling(false);
+      return;
+    }
+
+    setIsBooked(false);
+    setBookingId(null);
+    setCancelling(false);
+    router.push('/dashboard/bookings');
+    router.refresh();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -174,6 +245,8 @@ export default function BookEventPage() {
   const isFull = spotsRemaining <= 0;
   const eventDate = new Date(event.date_time);
   const isPastEvent = eventDate < new Date();
+  const hoursUntilEvent = (eventDate.getTime() - new Date().getTime()) / (1000 * 60 * 60);
+  const canCancel = hoursUntilEvent >= 24;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -245,9 +318,24 @@ export default function BookEventPage() {
                   This event has already passed
                 </div>
               ) : isBooked ? (
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 px-6 py-4 rounded-xl text-center font-semibold border border-green-200 mb-4">
-                  ✓ You&apos;re already booked for this event!
-                </div>
+                <>
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 px-6 py-4 rounded-xl text-center font-semibold border border-green-200 mb-4">
+                    ✓ You&apos;re booked for this event
+                  </div>
+                  {canCancel ? (
+                    <button
+                      onClick={handleCancel}
+                      disabled={cancelling}
+                      className="w-full bg-red-50 text-red-700 px-6 py-4 rounded-xl hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 font-bold text-lg border border-red-200 hover:border-red-300 shadow-sm hover:shadow-md"
+                    >
+                      {cancelling ? 'Cancelling...' : 'Cancel appointment'}
+                    </button>
+                  ) : (
+                    <div className="bg-gray-50 text-gray-600 px-6 py-4 rounded-xl text-center font-semibold border border-gray-200">
+                      Cancellation unavailable (&lt; 24h before event)
+                    </div>
+                  )}
+                </>
               ) : isFull ? (
                 <div className="bg-gray-50 text-gray-600 px-6 py-4 rounded-xl text-center font-semibold border border-gray-200 mb-4">
                   This event is fully booked

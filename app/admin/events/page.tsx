@@ -21,6 +21,7 @@ interface Event {
 export default function AdminEventsPage() {
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -55,7 +56,8 @@ export default function AdminEventsPage() {
         return;
       }
 
-      loadEvents();
+      await loadEvents();
+      await loadFavorites();
     }
 
     checkAuthAndLoad();
@@ -80,6 +82,70 @@ export default function AdminEventsPage() {
     setEvents(data || []);
     setLoading(false);
   }
+
+  async function loadFavorites() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('admin_event_favorites')
+      .select('event_id')
+      .eq('admin_id', user.id);
+
+    if (error) {
+      console.error('Error loading favorites:', error);
+      return;
+    }
+
+    const favoriteSet = new Set((data || []).map((item) => item.event_id));
+    setFavoriteIds(favoriteSet);
+  }
+
+  const handleToggleFavorite = async (eventId: string) => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const isFavorited = favoriteIds.has(eventId);
+
+    if (isFavorited) {
+      // Remove favorite
+      const { error } = await supabase
+        .from('admin_event_favorites')
+        .delete()
+        .eq('admin_id', user.id)
+        .eq('event_id', eventId);
+
+      if (error) {
+        console.error('Error removing favorite:', error);
+        return;
+      }
+
+      setFavoriteIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(eventId);
+        return newSet;
+      });
+    } else {
+      // Add favorite
+      const { error } = await supabase
+        .from('admin_event_favorites')
+        .insert({
+          admin_id: user.id,
+          event_id: eventId,
+        });
+
+      if (error) {
+        console.error('Error adding favorite:', error);
+        return;
+      }
+
+      setFavoriteIds((prev) => new Set(prev).add(eventId));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,8 +201,9 @@ export default function AdminEventsPage() {
     setMaxParticipants('');
     setShowForm(false);
 
-    // Reload events
+    // Reload events and favorites
     await loadEvents();
+    await loadFavorites();
     setSubmitting(false);
   };
 
@@ -158,6 +225,7 @@ export default function AdminEventsPage() {
     }
 
     await loadEvents();
+    await loadFavorites();
   };
 
   if (loading) {
@@ -330,6 +398,29 @@ export default function AdminEventsPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="font-bold text-lg text-indigo-600">{event.title}</h3>
+                          <button
+                            onClick={() => handleToggleFavorite(event.id)}
+                            className="p-1 hover:bg-yellow-50 rounded transition-colors"
+                            title={favoriteIds.has(event.id) ? 'Remove from favorites' : 'Add to favorites'}
+                          >
+                            <svg
+                              className={`w-5 h-5 transition-colors ${
+                                favoriteIds.has(event.id)
+                                  ? 'text-yellow-500 fill-current'
+                                  : 'text-gray-400 hover:text-yellow-500'
+                              }`}
+                              fill={favoriteIds.has(event.id) ? 'currentColor' : 'none'}
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                              />
+                            </svg>
+                          </button>
                           {isPast && (
                             <span className="px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-600">
                               Past
