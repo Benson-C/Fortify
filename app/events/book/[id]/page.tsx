@@ -86,54 +86,12 @@ export default function BookEventPage() {
     setBooking(true);
     setError(null);
 
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    // Use the API function which enforces single booking restrictions
+    const { createBookingClient } = await import('@/lib/api/bookings');
+    const { booking, error: bookingError } = await createBookingClient(eventId);
 
-    if (!user) {
-      setError('Not authenticated');
-      setBooking(false);
-      return;
-    }
-
-    // Check if already booked
-    const { data: existing } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('event_id', eventId)
-      .eq('status', 'confirmed')
-      .maybeSingle();
-
-    if (existing) {
-      setError('You are already booked for this event');
-      setBooking(false);
-      return;
-    }
-
-    // Check capacity
-    const { count } = await supabase
-      .from('bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_id', eventId)
-      .eq('status', 'confirmed');
-
-    if ((count || 0) >= (event?.max_capacity || 0)) {
-      setError('Event is fully booked');
-      setBooking(false);
-      return;
-    }
-
-    // Create booking
-    const { error: insertError } = await supabase
-      .from('bookings')
-      .insert({
-        user_id: user.id,
-        event_id: eventId,
-        status: 'confirmed',
-      });
-
-    if (insertError) {
-      setError(insertError.message);
+    if (bookingError || !booking) {
+      setError(bookingError?.message || 'Failed to create booking');
       setBooking(false);
       return;
     }

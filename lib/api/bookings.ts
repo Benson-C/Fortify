@@ -108,6 +108,60 @@ export async function getEventBookingCount(eventId: string): Promise<{ count: nu
 }
 
 /**
+ * Check if user has an existing confirmed booking for the same event type
+ * (Used for FUN/Assessment Day and DEXA Scan which only allow one booking at a time)
+ */
+export async function hasExistingBookingForEventType(
+  eventType: string
+): Promise<{ hasBooking: boolean; bookingId: string | null; error: Error | null }> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { hasBooking: false, bookingId: null, error: new Error('Not authenticated') };
+    }
+
+    // Only check for fun_assessment_day and dexa_scan
+    if (eventType !== 'fun_assessment_day' && eventType !== 'dexa_scan') {
+      return { hasBooking: false, bookingId: null, error: null };
+    }
+
+    const startTime = Date.now();
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        events!inner (
+          event_type,
+          date_time
+        )
+      `)
+      .eq('user_id', user.id)
+      .eq('status', 'confirmed')
+      .eq('events.event_type', eventType)
+      .gte('events.date_time', new Date().toISOString())
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      logDbOperation({
+        operation: 'select',
+        table: 'bookings',
+        userId: user.id,
+        query: { user_id: user.id, event_type: eventType, status: 'confirmed' },
+        error: new Error(error.message),
+        duration: Date.now() - startTime,
+      });
+      return { hasBooking: false, bookingId: null, error: new Error(error.message) };
+    }
+
+    return { hasBooking: !!data, bookingId: data?.id || null, error: null };
+  } catch (err) {
+    return { hasBooking: false, bookingId: null, error: err instanceof Error ? err : new Error('Unknown error') };
+  }
+}
+
+/**
  * Check if user is already booked for an event
  */
 export async function isUserBooked(eventId: string): Promise<{ isBooked: boolean; bookingId: string | null; error: Error | null }> {
