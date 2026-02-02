@@ -35,7 +35,11 @@ function columnsForType(t: EventType) {
   return ['Attendance'] as const; // touchpoints
 }
 
-export default async function AdminEventParticipantsPage({ params }: { params: { id: string } }) {
+export default async function AdminEventParticipantsPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { user, error } = await getUserProfile();
   if (error || !user) redirect('/login');
 
@@ -43,7 +47,7 @@ export default async function AdminEventParticipantsPage({ params }: { params: {
   if (!admin) redirect('/dashboard');
 
   const supabase = await createClient();
-  const eventId = params.id;
+  const { id: eventId } = await params;
 
   const { data: event } = await supabase
     .from('events')

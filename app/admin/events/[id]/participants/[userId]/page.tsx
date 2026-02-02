@@ -22,7 +22,7 @@ function eventTypeLabel(t: EventType) {
 export default async function AdminEventParticipantEntryPage({
   params,
 }: {
-  params: { id: string; userId: string };
+  params: Promise<{ id: string; userId: string }>;
 }) {
   const { user, error } = await getUserProfile();
   if (error || !user) redirect('/login');
@@ -31,8 +31,7 @@ export default async function AdminEventParticipantEntryPage({
   if (!admin) redirect('/dashboard');
 
   const supabase = await createClient();
-  const eventId = params.id;
-  const participantId = params.userId;
+  const { id: eventId, userId: participantId } = await params;
 
   const { data: event } = await supabase
     .from('events')
