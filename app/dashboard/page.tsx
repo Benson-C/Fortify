@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getUserProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { getUserMissions } from '@/lib/api/missions';
+import MissionsPanel from '@/components/MissionsPanel';
 
 export default async function DashboardPage() {
   const { user, error } = await getUserProfile();
@@ -73,6 +75,9 @@ export default async function DashboardPage() {
     .limit(1)
     .single();
 
+  // Get user missions
+  const missions = await getUserMissions(user.id);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="container mx-auto px-4 py-8">
@@ -83,6 +88,9 @@ export default async function DashboardPage() {
           </h1>
           <p className="text-lg text-gray-600">Your health & fitness research dashboard</p>
         </div>
+
+        {/* Missions */}
+        <MissionsPanel missions={missions} />
 
         {/* Things to do */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft p-6 mb-10 border border-gray-100">
