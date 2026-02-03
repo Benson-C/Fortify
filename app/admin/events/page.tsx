@@ -573,7 +573,7 @@ export default function AdminEventsPage() {
                         onChange={(e) =>
                           setEventType(e.target.value as 'fun_assessment_day' | 'dexa_scan' | 'touchpoints')
                         }
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
                         required
                       >
                         <option value="fun_assessment_day">FUN/Assessment Day</option>
@@ -633,7 +633,7 @@ export default function AdminEventsPage() {
                               onChange={(e) =>
                                 setRecurrenceFrequency(e.target.value as RecurrenceFrequency)
                               }
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
                             >
                               {RECURRENCE_OPTIONS.map((opt) => (
                                 <option key={opt.value} value={opt.value}>

@@ -127,7 +127,7 @@ export default function HealthMetricsForm({ onSuccess }: HealthMetricsFormProps)
           type="datetime-local"
           value={formData.recorded_date}
           onChange={(e) => setFormData({ ...formData, recorded_date: e.target.value })}
-          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white text-gray-900"
         />
       </div>
 
@@ -143,7 +143,7 @@ export default function HealthMetricsForm({ onSuccess }: HealthMetricsFormProps)
             min="0"
             value={formData.grip_strength || ''}
             onChange={(e) => setFormData({ ...formData, grip_strength: e.target.value ? parseFloat(e.target.value) : undefined })}
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white text-gray-900"
             placeholder="kg"
           />
         </div>
@@ -159,7 +159,7 @@ export default function HealthMetricsForm({ onSuccess }: HealthMetricsFormProps)
             min="0"
             value={formData.bone_density || ''}
             onChange={(e) => setFormData({ ...formData, bone_density: e.target.value ? parseFloat(e.target.value) : undefined })}
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white text-gray-900"
             placeholder="g/cm²"
           />
         </div>
@@ -175,7 +175,7 @@ export default function HealthMetricsForm({ onSuccess }: HealthMetricsFormProps)
             step="1"
             value={formData.pushup_count || ''}
             onChange={(e) => setFormData({ ...formData, pushup_count: e.target.value ? parseInt(e.target.value) : undefined })}
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white text-gray-900"
             placeholder="count"
           />
         </div>
@@ -191,7 +191,7 @@ export default function HealthMetricsForm({ onSuccess }: HealthMetricsFormProps)
             step="1"
             value={formData.heart_rate || ''}
             onChange={(e) => setFormData({ ...formData, heart_rate: e.target.value ? parseInt(e.target.value) : undefined })}
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white text-gray-900"
             placeholder="bpm"
           />
         </div>
@@ -208,7 +208,7 @@ export default function HealthMetricsForm({ onSuccess }: HealthMetricsFormProps)
             max="100"
             value={formData.body_fat || ''}
             onChange={(e) => setFormData({ ...formData, body_fat: e.target.value ? parseFloat(e.target.value) : undefined })}
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white text-gray-900"
             placeholder="%"
           />
         </div>
@@ -223,7 +223,7 @@ export default function HealthMetricsForm({ onSuccess }: HealthMetricsFormProps)
           rows={3}
           value={formData.notes || ''}
           onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white resize-none"
+          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-white text-gray-900 resize-none"
           placeholder="Any additional notes..."
         />
       </div>
