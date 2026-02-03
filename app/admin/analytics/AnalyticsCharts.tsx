@@ -64,17 +64,16 @@ export default function AnalyticsCharts({
             />
             <YAxis />
             <Tooltip 
-              formatter={(value: number, name: string, props: any) => {
-                if (props && props.payload) {
-                  return [`${value} participants (${props.payload.percentage}%)`, 'Completed'];
+              formatter={(value: any, name: any) => {
+                const data = participationChartData.find(d => d.completed === value);
+                if (data) {
+                  return [`${value} participants (${data.percentage}%)`, 'Completed'];
                 }
                 return [`${value}`, 'Completed'];
               }}
-              labelFormatter={(label, payload) => {
-                if (payload && payload[0] && payload[0].payload) {
-                  return payload[0].payload.fullName || label;
-                }
-                return label;
+              labelFormatter={(label: any) => {
+                const data = participationChartData.find(d => d.name === label);
+                return data?.fullName || label;
               }}
             />
             <Legend />
