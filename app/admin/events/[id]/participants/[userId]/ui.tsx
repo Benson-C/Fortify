@@ -50,6 +50,80 @@ const NumberField = React.memo(({
 
 NumberField.displayName = 'NumberField';
 
+const FileUploadField = React.memo(({
+  label,
+  file,
+  onFileChange,
+}: {
+  label: string;
+  file: File | null;
+  onFileChange: (file: File | null) => void;
+}) => {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0] || null;
+    onFileChange(selectedFile);
+  };
+
+  const handleRemove = () => {
+    onFileChange(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="py-3 border-b border-gray-100 last:border-b-0">
+      <label className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
+      {file ? (
+        <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-green-700 truncate">{file.name}</p>
+              <p className="text-xs text-green-600">{(file.size / 1024).toFixed(2)} KB</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleRemove}
+            className="ml-3 p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+            aria-label="Remove file"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ) : (
+        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+            <svg className="w-10 h-10 mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p className="mb-2 text-sm text-gray-500">
+              <span className="font-semibold">Click to upload</span> or drag and drop
+            </p>
+            <p className="text-xs text-gray-500">PDF, PNG, JPG (MAX. 10MB)</p>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+            accept=".pdf,.png,.jpg,.jpeg"
+          />
+        </label>
+      )}
+    </div>
+  );
+});
+
+FileUploadField.displayName = 'FileUploadField';
+
 export default function AdminParticipantDataEntry({
   eventId,
   userId,
@@ -81,10 +155,12 @@ export default function AdminParticipantDataEntry({
   const [attendance, setAttendance] = useState<boolean | null>(initialState.attendance);
   const [gripStrength, setGripStrength] = useState<string>(initialState.grip_strength?.toString() ?? '');
   const [inbody, setInbody] = useState<boolean | null>(initialState.inbody);
+  const [inbodyFile, setInbodyFile] = useState<File | null>(null);
   const [chairStand, setChairStand] = useState<string>(initialState.chair_stand_30s?.toString() ?? '');
   const [singleLegStand, setSingleLegStand] = useState<string>(initialState.single_leg_stand?.toString() ?? '');
   const [upDownSteps, setUpDownSteps] = useState<string>(initialState.up_down_step_count?.toString() ?? '');
   const [dexaScanned, setDexaScanned] = useState<boolean | null>(initialState.dexa_scanned);
+  const [dexaFile, setDexaFile] = useState<File | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
@@ -189,13 +265,25 @@ export default function AdminParticipantDataEntry({
 
         {eventType === 'touchpoints' ? null : eventType === 'dexa_scan' ? (
           <>
-            <BoolToggle label="DEXA scanned" value={dexaScanned} onChange={setDexaScanned} />
-            <BoolToggle label="Inbody" value={inbody} onChange={setInbody} />
+            <FileUploadField label="DEXA Scan Document" file={dexaFile} onFileChange={(file) => {
+              setDexaFile(file);
+              // Set boolean based on whether file is uploaded (for database compatibility)
+              setDexaScanned(file !== null);
+            }} />
+            <FileUploadField label="Inbody Document" file={inbodyFile} onFileChange={(file) => {
+              setInbodyFile(file);
+              // Set boolean based on whether file is uploaded (for database compatibility)
+              setInbody(file !== null);
+            }} />
             <NumberField label="Grip Strength" value={gripStrength} onChange={setGripStrength} placeholder="e.g., 32.5" />
           </>
         ) : (
           <>
-            <BoolToggle label="Inbody" value={inbody} onChange={setInbody} />
+            <FileUploadField label="Inbody Document" file={inbodyFile} onFileChange={(file) => {
+              setInbodyFile(file);
+              // Set boolean based on whether file is uploaded (for database compatibility)
+              setInbody(file !== null);
+            }} />
             <NumberField label="Grip Strength" value={gripStrength} onChange={setGripStrength} placeholder="e.g., 32.5" />
             <NumberField label="30-Second Chair Stand Test" value={chairStand} onChange={setChairStand} placeholder="e.g., 12" />
             <NumberField label="Single leg stand" value={singleLegStand} onChange={setSingleLegStand} placeholder="e.g., 18.4" />
