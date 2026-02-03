@@ -53,30 +53,28 @@ interface DexaTimeTableProps {
 }
 
 function DexaTimeTable({ date, timeSlots, setTimeSlots, blockDuration, setBlockDuration }: DexaTimeTableProps) {
-  const [hoveredSlot, setHoveredSlot] = useState<{scanner: 1 | 2; hour: number; minute: number} | null>(null);
+  const [hoveredSlot, setHoveredSlot] = useState<{scanner: 1 | 2; timeSlotIndex: number} | null>(null);
 
-  // Generate hours from 9am to 7pm
-  const hours = Array.from({ length: 11 }, (_, i) => i + 9); // 9 to 19 (7pm)
-  
-  // Snap to 10-minute intervals
-  const snapToInterval = (minute: number): number => {
-    return Math.round(minute / 10) * 10;
+  // Generate all 10-minute time slots from 9:00am to 6:50pm (60 slots: 9:00, 9:10, ..., 18:50)
+  // 9am = 9*60 = 540 minutes, 7pm = 19*60 = 1140 minutes
+  // From 540 to 1140, in 10-minute intervals = 60 slots
+  const timeSlotsList = Array.from({ length: 60 }, (_, i) => {
+    const totalMinutes = 540 + i * 10; // Start at 9am (540 minutes)
+    const hour = Math.floor(totalMinutes / 60);
+    const minute = totalMinutes % 60;
+    return { hour, minute, totalMinutes };
+  });
+
+  const handleCellHover = (scanner: 1 | 2, timeSlotIndex: number) => {
+    setHoveredSlot({ scanner, timeSlotIndex });
   };
 
-  const handleCellHover = (scanner: 1 | 2, hour: number, minute: number) => {
-    const snappedMinute = snapToInterval(minute);
-    if (snappedMinute < 60) {
-      setHoveredSlot({ scanner, hour, minute: snappedMinute });
-    }
-  };
+  const handleCellClick = (scanner: 1 | 2, timeSlotIndex: number) => {
+    const timeSlot = timeSlotsList[timeSlotIndex];
+    if (!timeSlot) return;
 
-  const handleCellClick = (scanner: 1 | 2, hour: number, minute: number) => {
-    const snappedMinute = snapToInterval(minute);
-    if (snappedMinute >= 60) return;
-
-    const slotKey = `${scanner}-${hour}-${snappedMinute}`;
     const existingIndex = timeSlots.findIndex(
-      (s) => s.scanner === scanner && s.hour === hour && s.minute === snappedMinute
+      (s) => s.scanner === scanner && s.hour === timeSlot.hour && s.minute === timeSlot.minute
     );
 
     if (existingIndex >= 0) {
@@ -84,7 +82,7 @@ function DexaTimeTable({ date, timeSlots, setTimeSlots, blockDuration, setBlockD
       setTimeSlots(timeSlots.filter((_, i) => i !== existingIndex));
     } else {
       // Add slot
-      setTimeSlots([...timeSlots, { scanner, hour, minute: snappedMinute, duration: blockDuration }]);
+      setTimeSlots([...timeSlots, { scanner, hour: timeSlot.hour, minute: timeSlot.minute, duration: blockDuration }]);
     }
   };
 
@@ -104,15 +102,31 @@ function DexaTimeTable({ date, timeSlots, setTimeSlots, blockDuration, setBlockD
     return { hour: endHour, minute: endMinute };
   };
 
-  const isTimeInSlot = (scanner: 1 | 2, hour: number, minute: number): boolean => {
+  const isTimeInSlot = (scanner: 1 | 2, timeSlotIndex: number): boolean => {
+    const timeSlot = timeSlotsList[timeSlotIndex];
+    if (!timeSlot) return false;
+    
     return timeSlots.some((slot) => {
       if (slot.scanner !== scanner) return false;
       const end = getSlotEndTime(slot);
       const slotStart = slot.hour * 60 + slot.minute;
       const slotEnd = end.hour * 60 + end.minute;
-      const checkTime = hour * 60 + minute;
+      const checkTime = timeSlot.totalMinutes;
       return checkTime >= slotStart && checkTime < slotEnd;
     });
+  };
+
+  const isInHoveredBlock = (scanner: 1 | 2, timeSlotIndex: number): boolean => {
+    if (!hoveredSlot || hoveredSlot.scanner !== scanner) return false;
+    
+    const hoveredTimeSlot = timeSlotsList[hoveredSlot.timeSlotIndex];
+    if (!hoveredTimeSlot) return false;
+    
+    const hoverStart = hoveredTimeSlot.totalMinutes;
+    const hoverEnd = hoverStart + blockDuration;
+    const checkTime = timeSlotsList[timeSlotIndex]?.totalMinutes;
+    
+    return checkTime !== undefined && checkTime >= hoverStart && checkTime < hoverEnd;
   };
 
   return (
@@ -152,14 +166,29 @@ function DexaTimeTable({ date, timeSlots, setTimeSlots, blockDuration, setBlockD
                 <th className="p-2 text-xs font-semibold text-gray-600 bg-gray-50 border-b border-gray-200 sticky left-0 z-10">
                   Scanner
                 </th>
-                {hours.map((hour) => (
-                  <th
-                    key={hour}
-                    className="p-2 text-xs font-semibold text-gray-600 bg-gray-50 border-b border-gray-200 min-w-[60px]"
-                  >
-                    {hour === 12 ? '12pm' : hour < 12 ? `${hour}am` : `${hour - 12}pm`}
-                  </th>
-                ))}
+                {timeSlotsList.map((timeSlot, idx) => {
+                  // Show hour labels only at the start of each hour (every 6th slot: 0, 6, 12, ...)
+                  const showLabel = timeSlot.minute === 0;
+                  return (
+                    <th
+                      key={idx}
+                      className={`p-2 text-xs font-semibold text-gray-600 bg-gray-50 border-b border-r border-gray-200 min-w-[40px] ${
+                        showLabel ? 'border-l-2 border-gray-400' : ''
+                      }`}
+                    >
+                      {showLabel ? (
+                        <div className="text-center">
+                          <div>{timeSlot.hour === 12 ? '12' : timeSlot.hour < 12 ? timeSlot.hour : timeSlot.hour - 12}</div>
+                          <div className="text-[10px] text-gray-500">{timeSlot.hour < 12 ? 'am' : 'pm'}</div>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-gray-400 text-center">
+                          {String(timeSlot.minute).padStart(2, '0')}
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -168,56 +197,38 @@ function DexaTimeTable({ date, timeSlots, setTimeSlots, blockDuration, setBlockD
                   <td className="p-3 text-sm font-semibold text-gray-700 bg-gray-50 border-r border-gray-200 sticky left-0 z-10">
                     Scanner {scanner}
                   </td>
-                  {hours.map((hour) => {
-                    // Each hour has 6 10-minute intervals
+                  {timeSlotsList.map((timeSlot, idx) => {
+                    const isSelected = isSlotSelected(scanner as 1 | 2, timeSlot.hour, timeSlot.minute);
+                    const isInSlot = isTimeInSlot(scanner as 1 | 2, idx);
+                    const isInHovered = isInHoveredBlock(scanner as 1 | 2, idx);
+                    
+                    const endTime = (() => {
+                      const endMinutes = timeSlot.totalMinutes + blockDuration;
+                      const endHour = Math.floor(endMinutes / 60);
+                      const endMin = endMinutes % 60;
+                      return `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
+                    })();
+
                     return (
                       <td
-                        key={`${scanner}-${hour}`}
-                        className="p-0 border-r border-gray-200 relative"
-                        style={{ minWidth: '60px' }}
+                        key={idx}
+                        className={`p-1 border-r border-gray-200 cursor-pointer transition-all ${
+                          isSelected || isInSlot
+                            ? 'bg-indigo-500 hover:bg-indigo-600'
+                            : isInHovered
+                            ? 'bg-indigo-200/50 hover:bg-indigo-300/50'
+                            : 'hover:bg-indigo-50'
+                        }`}
+                        style={{ minWidth: '40px' }}
+                        onMouseEnter={() => handleCellHover(scanner as 1 | 2, idx)}
+                        onMouseLeave={() => setHoveredSlot(null)}
+                        onClick={() => handleCellClick(scanner as 1 | 2, idx)}
+                        title={`${String(timeSlot.hour).padStart(2, '0')}:${String(timeSlot.minute).padStart(2, '0')} - ${endTime} (${blockDuration} min)`}
                       >
-                        <div className="relative h-16">
-                          {[0, 10, 20, 30, 40, 50].map((minute) => {
-                            const isSelected = isSlotSelected(scanner as 1 | 2, hour, minute);
-                            const isInSlot = isTimeInSlot(scanner as 1 | 2, hour, minute);
-                            const isHovered =
-                              hoveredSlot?.scanner === scanner &&
-                              hoveredSlot?.hour === hour &&
-                              hoveredSlot?.minute === minute;
-
-                            // Calculate if hovered block spans this cell (can span multiple hours)
-                            let isInHoveredBlock = false;
-                            if (hoveredSlot && hoveredSlot.scanner === scanner) {
-                              const hoverStartMinutes = hoveredSlot.hour * 60 + hoveredSlot.minute;
-                              const hoverEndMinutes = hoverStartMinutes + blockDuration;
-                              const cellStartMinutes = hour * 60 + minute;
-                              const cellEndMinutes = cellStartMinutes + 10;
-                              isInHoveredBlock = hoverStartMinutes < cellEndMinutes && hoverEndMinutes > cellStartMinutes;
-                            }
-
-                            return (
-                              <div
-                                key={minute}
-                                className={`absolute left-0 right-0 h-[16.66%] border-b border-gray-100 cursor-pointer transition-all ${
-                                  isSelected || isInSlot
-                                    ? 'bg-indigo-500 hover:bg-indigo-600'
-                                    : isInHoveredBlock
-                                    ? 'bg-indigo-200/50 hover:bg-indigo-300/50'
-                                    : 'hover:bg-indigo-50'
-                                }`}
-                                style={{ top: `${(minute / 60) * 100}%` }}
-                                onMouseEnter={() => handleCellHover(scanner as 1 | 2, hour, minute)}
-                                onMouseLeave={() => setHoveredSlot(null)}
-                                onClick={() => handleCellClick(scanner as 1 | 2, hour, minute)}
-                                title={`${hour}:${String(minute).padStart(2, '0')} - ${(() => {
-                                  const endMin = minute + blockDuration;
-                                  const endHr = hour + Math.floor(endMin / 60);
-                                  const endMinFinal = endMin % 60;
-                                  return `${endHr}:${String(endMinFinal).padStart(2, '0')}`;
-                                })()}`}
-                              />
-                            );
-                          })}
+                        <div className="h-8 w-full flex items-center justify-center">
+                          {isSelected && (
+                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                          )}
                         </div>
                       </td>
                     );
