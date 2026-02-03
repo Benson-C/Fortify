@@ -37,6 +37,23 @@ function getEventsOnDate(events: Event[], dateKey: string): Event[] {
   return events.filter((e) => toDateKey(new Date(e.date_time)) === dateKey);
 }
 
+function getEventTypeColor(eventType: string): string {
+  switch (eventType) {
+    case 'fun_assessment_day':
+      return 'bg-blue-500';
+    case 'dexa_scan':
+      return 'bg-purple-500';
+    case 'touchpoints':
+      return 'bg-green-500';
+    default:
+      return 'bg-gray-500';
+  }
+}
+
+function getEventTypesOnDate(events: Event[], dateKey: string): Set<string> {
+  return new Set(getEventsOnDate(events, dateKey).map(e => e.event_type));
+}
+
 interface DexaTimeSlot {
   scanner: 1 | 2;
   hour: number;
@@ -733,18 +750,30 @@ export default function AdminEventsPage() {
               const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
               const hasEvents = datesWithEvents.has(dateKey);
               const isSelected = selectedDateKey === dateKey;
+              const eventTypes = getEventTypesOnDate(events, dateKey);
               return (
                 <button
                   key={dateKey}
                   type="button"
                   onClick={() => openPanel(dateKey)}
-                  className={`aspect-square rounded-xl text-sm font-semibold transition-all ${
+                  className={`aspect-square rounded-xl text-sm font-semibold transition-all relative ${
                     hasEvents
                       ? 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200 border border-indigo-200'
                       : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border border-gray-200'
                   } ${isSelected ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}`}
                 >
                   {day}
+                  {eventTypes.size > 0 && (
+                    <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 flex gap-0.5">
+                      {Array.from(eventTypes).map((eventType) => (
+                        <div
+                          key={eventType}
+                          className={`w-1.5 h-1.5 rounded-full ${getEventTypeColor(eventType)}`}
+                          title={eventType}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -764,7 +793,7 @@ export default function AdminEventsPage() {
           />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
             <div
-              className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto pointer-events-auto"
+              className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-6xl w-full max-h-[90vh] overflow-y-auto pointer-events-auto"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
