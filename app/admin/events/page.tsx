@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface Event {
   id: string;
@@ -678,24 +679,27 @@ export default function AdminEventsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-10">
-          <Link
-            href="/admin"
-            className="text-indigo-600 hover:text-indigo-700 mb-4 inline-flex items-center gap-2 font-semibold transition-colors"
-          >
-            <span>←</span> Back to Admin Dashboard
-          </Link>
-          <h1 className="text-5xl font-extrabold text-gray-900 mb-3">
-            Manage{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
-              Events
-            </span>
-          </h1>
-          <p className="text-lg text-gray-600">
-            Click a date to view or create events
-          </p>
+        <div className="mb-10 flex justify-between items-start">
+          <div>
+            <Link
+              href="/admin"
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 mb-4 inline-flex items-center gap-2 font-semibold transition-colors"
+            >
+              <span>←</span> Back to Admin Dashboard
+            </Link>
+            <h1 className="text-5xl font-extrabold text-gray-900 dark:text-white mb-3">
+              Manage{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
+                Events
+              </span>
+            </h1>
+            <p className="text-lg text-gray-600 dark:text-gray-300">
+              Click a date to view or create events
+            </p>
+          </div>
+          <ThemeToggle />
         </div>
 
         {error && (

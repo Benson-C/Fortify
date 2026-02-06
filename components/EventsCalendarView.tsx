@@ -139,7 +139,7 @@ export default function EventsCalendarView({
       </div>
 
       {viewMode === 'calendar' && (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft p-6 border border-gray-100">
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-soft p-6 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <button
               type="button"

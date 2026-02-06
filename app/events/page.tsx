@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getUserProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import EventsCalendarView from '@/components/EventsCalendarView';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default async function EventsPage() {
   const { user, error } = await getUserProfile();
@@ -48,23 +49,26 @@ export default async function EventsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10">
           <div>
-            <h1 className="text-5xl font-extrabold text-gray-900 mb-2">
+            <h1 className="text-5xl font-extrabold text-gray-900 dark:text-white mb-2">
               Workout Events
             </h1>
-            <p className="text-lg text-gray-600">
+            <p className="text-lg text-gray-600 dark:text-gray-300">
               Book your next fitness session
             </p>
           </div>
-          <Link
-            href="/dashboard"
-            className="px-6 py-3 bg-white/80 backdrop-blur-sm text-indigo-600 rounded-xl font-semibold border-2 border-indigo-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 shadow-sm hover:shadow-md"
-          >
-            ← Dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Link
+              href="/dashboard"
+              className="px-6 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm text-indigo-600 dark:text-indigo-400 rounded-xl font-semibold border-2 border-indigo-200 dark:border-indigo-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-gray-700 transition-all duration-300 shadow-sm hover:shadow-md"
+            >
+              ← Dashboard
+            </Link>
+          </div>
         </div>
 
         {eventsError ? (
