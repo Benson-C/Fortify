@@ -7,7 +7,6 @@ import { createClient } from '@/lib/supabase/client';
 import { registerSchema, type RegisterInput } from '@/lib/validations';
 import { logger, logAuthEvent } from '@/lib/logger';
 import { checkRateLimit, RateLimitPresets } from '@/lib/rate-limit';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 type RegisterStep = 'account' | 'screening';
 type YesNoAnswer = 'yes' | 'no' | null;
@@ -355,10 +354,7 @@ export default function RegisterPage() {
     });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center px-4 py-12 relative">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center px-4 py-12">
       {loading && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm px-4"

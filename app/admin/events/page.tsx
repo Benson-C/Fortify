@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface Event {
   id: string;
@@ -38,255 +37,6 @@ function getEventsOnDate(events: Event[], dateKey: string): Event[] {
   return events.filter((e) => toDateKey(new Date(e.date_time)) === dateKey);
 }
 
-function getEventTypeColor(eventType: string): string {
-  switch (eventType) {
-    case 'fun_assessment_day':
-      return 'bg-blue-500';
-    case 'dexa_scan':
-      return 'bg-purple-500';
-    case 'touchpoints':
-      return 'bg-green-500';
-    default:
-      return 'bg-gray-500';
-  }
-}
-
-function getEventTypesOnDate(events: Event[], dateKey: string): Set<string> {
-  return new Set(getEventsOnDate(events, dateKey).map(e => e.event_type));
-}
-
-interface DexaTimeSlot {
-  scanner: 1 | 2;
-  hour: number;
-  minute: number;
-  duration: number;
-}
-
-interface DexaTimeTableProps {
-  date: string;
-  timeSlots: DexaTimeSlot[];
-  setTimeSlots: (slots: DexaTimeSlot[]) => void;
-  blockDuration: number;
-  setBlockDuration: (duration: number) => void;
-}
-
-function DexaTimeTable({ date, timeSlots, setTimeSlots, blockDuration, setBlockDuration }: DexaTimeTableProps) {
-  const [hoveredSlot, setHoveredSlot] = useState<{scanner: 1 | 2; timeSlotIndex: number} | null>(null);
-
-  // Generate all 10-minute time slots from 9:00am to 6:50pm (60 slots: 9:00, 9:10, ..., 18:50)
-  // 9am = 9*60 = 540 minutes, 7pm = 19*60 = 1140 minutes
-  // From 540 to 1140, in 10-minute intervals = 60 slots
-  const timeSlotsList = Array.from({ length: 60 }, (_, i) => {
-    const totalMinutes = 540 + i * 10; // Start at 9am (540 minutes)
-    const hour = Math.floor(totalMinutes / 60);
-    const minute = totalMinutes % 60;
-    return { hour, minute, totalMinutes };
-  });
-
-  const handleCellHover = (scanner: 1 | 2, timeSlotIndex: number) => {
-    setHoveredSlot({ scanner, timeSlotIndex });
-  };
-
-  const handleCellClick = (scanner: 1 | 2, timeSlotIndex: number) => {
-    const timeSlot = timeSlotsList[timeSlotIndex];
-    if (!timeSlot) return;
-
-    const existingIndex = timeSlots.findIndex(
-      (s) => s.scanner === scanner && s.hour === timeSlot.hour && s.minute === timeSlot.minute
-    );
-
-    if (existingIndex >= 0) {
-      // Remove slot
-      setTimeSlots(timeSlots.filter((_, i) => i !== existingIndex));
-    } else {
-      // Add slot
-      setTimeSlots([...timeSlots, { scanner, hour: timeSlot.hour, minute: timeSlot.minute, duration: blockDuration }]);
-    }
-  };
-
-  const isSlotSelected = (scanner: 1 | 2, hour: number, minute: number): boolean => {
-    return timeSlots.some(
-      (s) => s.scanner === scanner && s.hour === hour && s.minute === minute
-    );
-  };
-
-  const getSlotEndTime = (slot: DexaTimeSlot): { hour: number; minute: number } => {
-    let endMinute = slot.minute + slot.duration;
-    let endHour = slot.hour;
-    while (endMinute >= 60) {
-      endMinute -= 60;
-      endHour += 1;
-    }
-    return { hour: endHour, minute: endMinute };
-  };
-
-  const isTimeInSlot = (scanner: 1 | 2, timeSlotIndex: number): boolean => {
-    const timeSlot = timeSlotsList[timeSlotIndex];
-    if (!timeSlot) return false;
-    
-    return timeSlots.some((slot) => {
-      if (slot.scanner !== scanner) return false;
-      const end = getSlotEndTime(slot);
-      const slotStart = slot.hour * 60 + slot.minute;
-      const slotEnd = end.hour * 60 + end.minute;
-      const checkTime = timeSlot.totalMinutes;
-      return checkTime >= slotStart && checkTime < slotEnd;
-    });
-  };
-
-  const isInHoveredBlock = (scanner: 1 | 2, timeSlotIndex: number): boolean => {
-    if (!hoveredSlot || hoveredSlot.scanner !== scanner) return false;
-    
-    const hoveredTimeSlot = timeSlotsList[hoveredSlot.timeSlotIndex];
-    if (!hoveredTimeSlot) return false;
-    
-    const hoverStart = hoveredTimeSlot.totalMinutes;
-    const hoverEnd = hoverStart + blockDuration;
-    const checkTime = timeSlotsList[timeSlotIndex]?.totalMinutes;
-    
-    return checkTime !== undefined && checkTime >= hoverStart && checkTime < hoverEnd;
-  };
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label htmlFor="blockDuration" className="block text-sm font-semibold text-gray-700 mb-2">
-          Time Block Duration (minutes)
-        </label>
-        <input
-          type="number"
-          id="blockDuration"
-          value={blockDuration}
-          onChange={(e) => {
-            const newDuration = parseInt(e.target.value, 10);
-            if (!isNaN(newDuration) && newDuration > 0) {
-              setBlockDuration(newDuration);
-              // Update existing slots with new duration
-              setTimeSlots(timeSlots.map(slot => ({ ...slot, duration: newDuration })));
-            }
-          }}
-          min="10"
-          step="10"
-          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-        />
-      </div>
-
-      <div className="border border-gray-300 rounded-xl overflow-hidden">
-        <div className="bg-gray-50 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Select Time Slots (9am - 7pm)</h3>
-          <p className="text-xs text-gray-500">Hover to preview, click to add/remove time slots</p>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="p-2 text-xs font-semibold text-gray-600 bg-gray-50 border-b border-gray-200 sticky left-0 z-10">
-                  Scanner
-                </th>
-                {timeSlotsList.map((timeSlot, idx) => {
-                  // Show hour labels only at the start of each hour (every 6th slot: 0, 6, 12, ...)
-                  const showLabel = timeSlot.minute === 0;
-                  return (
-                    <th
-                      key={idx}
-                      className={`p-2 text-xs font-semibold text-gray-600 bg-gray-50 border-b border-r border-gray-200 min-w-[40px] ${
-                        showLabel ? 'border-l-2 border-gray-400' : ''
-                      }`}
-                    >
-                      {showLabel ? (
-                        <div className="text-center">
-                          <div>{timeSlot.hour === 12 ? '12' : timeSlot.hour < 12 ? timeSlot.hour : timeSlot.hour - 12}</div>
-                          <div className="text-[10px] text-gray-500">{timeSlot.hour < 12 ? 'am' : 'pm'}</div>
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-gray-400 text-center">
-                          {String(timeSlot.minute).padStart(2, '0')}
-                        </div>
-                      )}
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {[1, 2].map((scanner) => (
-                <tr key={scanner}>
-                  <td className="p-3 text-sm font-semibold text-gray-700 bg-gray-50 border-r border-gray-200 sticky left-0 z-10">
-                    Scanner {scanner}
-                  </td>
-                  {timeSlotsList.map((timeSlot, idx) => {
-                    const isSelected = isSlotSelected(scanner as 1 | 2, timeSlot.hour, timeSlot.minute);
-                    const isInSlot = isTimeInSlot(scanner as 1 | 2, idx);
-                    const isInHovered = isInHoveredBlock(scanner as 1 | 2, idx);
-                    
-                    const endTime = (() => {
-                      const endMinutes = timeSlot.totalMinutes + blockDuration;
-                      const endHour = Math.floor(endMinutes / 60);
-                      const endMin = endMinutes % 60;
-                      return `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
-                    })();
-
-                    return (
-                      <td
-                        key={idx}
-                        className={`p-1 border-r border-gray-200 cursor-pointer transition-all ${
-                          isSelected || isInSlot
-                            ? 'bg-indigo-500 hover:bg-indigo-600'
-                            : isInHovered
-                            ? 'bg-indigo-200/50 hover:bg-indigo-300/50'
-                            : 'hover:bg-indigo-50'
-                        }`}
-                        style={{ minWidth: '40px' }}
-                        onMouseEnter={() => handleCellHover(scanner as 1 | 2, idx)}
-                        onMouseLeave={() => setHoveredSlot(null)}
-                        onClick={() => handleCellClick(scanner as 1 | 2, idx)}
-                        title={`${String(timeSlot.hour).padStart(2, '0')}:${String(timeSlot.minute).padStart(2, '0')} - ${endTime} (${blockDuration} min)`}
-                      >
-                        <div className="h-8 w-full flex items-center justify-center">
-                          {isSelected && (
-                            <div className="w-2 h-2 rounded-full bg-white"></div>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {timeSlots.length > 0 && (
-        <div className="mt-4 p-4 bg-indigo-50 rounded-xl">
-          <p className="text-sm font-semibold text-indigo-900 mb-2">
-            Selected Time Slots ({timeSlots.length}):
-          </p>
-          <div className="space-y-1">
-            {timeSlots
-              .sort((a, b) => {
-                if (a.scanner !== b.scanner) return a.scanner - b.scanner;
-                if (a.hour !== b.hour) return a.hour - b.hour;
-                return a.minute - b.minute;
-              })
-              .map((slot, idx) => {
-                const end = getSlotEndTime(slot);
-                return (
-                  <div key={idx} className="text-xs text-indigo-700">
-                    Scanner {slot.scanner}: {String(slot.hour).padStart(2, '0')}:
-                    {String(slot.minute).padStart(2, '0')} - {String(end.hour).padStart(2, '0')}:
-                    {String(end.minute).padStart(2, '0')} ({slot.duration} min)
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function AdminEventsPage() {
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
@@ -310,16 +60,10 @@ export default function AdminEventsPage() {
   const [eventType, setEventType] = useState<
     'fun_assessment_day' | 'dexa_scan' | 'touchpoints'
   >('fun_assessment_day');
-  const [location, setLocation] = useState<'Location A' | 'Location B' | 'Location C'>('Location A');
-  const [duration, setDuration] = useState('1.5'); // Default 1.5 hours for fun_assessment_day
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [recurrenceFrequency, setRecurrenceFrequency] =
     useState<RecurrenceFrequency>('weekly');
-  
-  // DEXA scan specific state
-  const [dexaTimeSlots, setDexaTimeSlots] = useState<Array<{scanner: 1 | 2; hour: number; minute: number; duration: number}>>([]);
-  const [dexaBlockDuration, setDexaBlockDuration] = useState(20); // Default 20 minutes
 
   useEffect(() => {
     async function checkAuthAndLoad() {
@@ -446,13 +190,9 @@ export default function AdminEventsPage() {
     setEventDescription('');
     setMaxParticipants('');
     setEventType('fun_assessment_day');
-    setLocation('Location A');
-    setDuration('1.5');
     setIsRecurring(false);
     setRecurrenceEndDate('');
     setRecurrenceFrequency('weekly');
-    setDexaTimeSlots([]);
-    setDexaBlockDuration(20);
     setError(null);
   };
 
@@ -511,21 +251,12 @@ export default function AdminEventsPage() {
     setSubmitting(true);
     setError(null);
 
-    if (!eventName.trim() || !eventDate || !maxParticipants) {
-      setError('Please fill in all required fields');
-      setSubmitting(false);
-      return;
-    }
-
-    // For DEXA scans, require at least one time slot
-    if (eventType === 'dexa_scan' && dexaTimeSlots.length === 0) {
-      setError('Please select at least one time slot for DEXA scan');
-      setSubmitting(false);
-      return;
-    }
-
-    // For non-DEXA events, require time input
-    if (eventType !== 'dexa_scan' && !eventTime) {
+    if (
+      !eventName.trim() ||
+      !eventDate ||
+      !eventTime ||
+      !maxParticipants
+    ) {
       setError('Please fill in all required fields');
       setSubmitting(false);
       return;
@@ -538,101 +269,63 @@ export default function AdminEventsPage() {
       return;
     }
 
-    // Calculate duration in minutes
-    let durationMinutes = 60; // Default
-    if (eventType === 'fun_assessment_day') {
-      const durationHours = parseFloat(duration);
-      if (!isNaN(durationHours) && durationHours > 0) {
-        durationMinutes = Math.round(durationHours * 60);
-      }
-    } else if (eventType === 'dexa_scan') {
-      durationMinutes = dexaBlockDuration;
+    const startDate = new Date(`${eventDate}T${eventTime}`);
+    if (isNaN(startDate.getTime())) {
+      setError('Invalid date or time');
+      setSubmitting(false);
+      return;
     }
 
-    const supabase = createClient();
+    let datesToCreate: Date[] = [new Date(startDate)];
 
-    if (eventType === 'dexa_scan') {
-      // Handle DEXA scan: create multiple events from time slots
-      for (const slot of dexaTimeSlots) {
-        const slotDate = new Date(eventDate);
-        slotDate.setHours(slot.hour, slot.minute, 0, 0);
-        
-        const { error: insertError } = await supabase.from('events').insert({
-          title: `${eventName.trim()} - Scanner ${slot.scanner}`,
-          description: eventDescription.trim() || null,
-          date_time: slotDate.toISOString(),
-          max_capacity: maxParticipantsNum,
-          duration: slot.duration,
-          event_type: eventType,
-          location: location,
-          instructor_name: null,
-        });
-
-        if (insertError) {
-          setError(insertError.message);
-          setSubmitting(false);
-          return;
-        }
-      }
-    } else {
-      // Handle regular events (fun_assessment_day, touchpoints)
-      const startDate = new Date(`${eventDate}T${eventTime}`);
-      if (isNaN(startDate.getTime())) {
-        setError('Invalid date or time');
+    if (isRecurring) {
+      if (!recurrenceEndDate.trim()) {
+        setError('Please set an end date for the recurring event');
         setSubmitting(false);
         return;
       }
-
-      let datesToCreate: Date[] = [new Date(startDate)];
-
-      if (isRecurring) {
-        if (!recurrenceEndDate.trim()) {
-          setError('Please set an end date for the recurring event');
-          setSubmitting(false);
-          return;
-        }
-        const end = new Date(recurrenceEndDate);
-        end.setHours(23, 59, 59, 999);
-        if (isNaN(end.getTime()) || end < startDate) {
-          setError('End date must be on or after the start date');
-          setSubmitting(false);
-          return;
-        }
-        const allDates: Date[] = [];
-        let cur = new Date(startDate);
-        const startHours = startDate.getHours();
-        const startMins = startDate.getMinutes();
-        while (cur <= end) {
-          allDates.push(new Date(cur));
-          if (recurrenceFrequency === 'weekly') {
-            cur.setDate(cur.getDate() + 7);
-          } else if (recurrenceFrequency === 'every_2_weeks') {
-            cur.setDate(cur.getDate() + 14);
-          } else {
-            cur.setMonth(cur.getMonth() + 1);
-          }
-          cur.setHours(startHours, startMins, 0, 0);
-        }
-        datesToCreate = allDates;
+      const end = new Date(recurrenceEndDate);
+      end.setHours(23, 59, 59, 999);
+      if (isNaN(end.getTime()) || end < startDate) {
+        setError('End date must be on or after the start date');
+        setSubmitting(false);
+        return;
       }
-
-      for (const d of datesToCreate) {
-        const { error: insertError } = await supabase.from('events').insert({
-          title: eventName.trim(),
-          description: eventDescription.trim() || null,
-          date_time: d.toISOString(),
-          max_capacity: maxParticipantsNum,
-          duration: durationMinutes,
-          event_type: eventType,
-          location: location,
-          instructor_name: null,
-        });
-
-        if (insertError) {
-          setError(insertError.message);
-          setSubmitting(false);
-          return;
+      const allDates: Date[] = [];
+      let cur = new Date(startDate);
+      const startHours = startDate.getHours();
+      const startMins = startDate.getMinutes();
+      while (cur <= end) {
+        allDates.push(new Date(cur));
+        if (recurrenceFrequency === 'weekly') {
+          cur.setDate(cur.getDate() + 7);
+        } else if (recurrenceFrequency === 'every_2_weeks') {
+          cur.setDate(cur.getDate() + 14);
+        } else {
+          cur.setMonth(cur.getMonth() + 1);
         }
+        cur.setHours(startHours, startMins, 0, 0);
+      }
+      datesToCreate = allDates;
+    }
+
+    const supabase = createClient();
+    for (const d of datesToCreate) {
+      const { error: insertError } = await supabase.from('events').insert({
+        title: eventName.trim(),
+        description: eventDescription.trim() || null,
+        date_time: d.toISOString(),
+        max_capacity: maxParticipantsNum,
+        duration: 60,
+        event_type: eventType,
+        location: null,
+        instructor_name: null,
+      });
+
+      if (insertError) {
+        setError(insertError.message);
+        setSubmitting(false);
+        return;
       }
     }
 
@@ -679,27 +372,24 @@ export default function AdminEventsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-10 flex justify-between items-start">
-          <div>
-            <Link
-              href="/admin"
-              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 mb-4 inline-flex items-center gap-2 font-semibold transition-colors"
-            >
-              <span>←</span> Back to Admin Dashboard
-            </Link>
-            <h1 className="text-5xl font-extrabold text-gray-900 dark:text-white mb-3">
-              Manage{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
-                Events
-              </span>
-            </h1>
-            <p className="text-lg text-gray-600 dark:text-gray-300">
-              Click a date to view or create events
-            </p>
-          </div>
-          <ThemeToggle />
+        <div className="mb-10">
+          <Link
+            href="/admin"
+            className="text-indigo-600 hover:text-indigo-700 mb-4 inline-flex items-center gap-2 font-semibold transition-colors"
+          >
+            <span>←</span> Back to Admin Dashboard
+          </Link>
+          <h1 className="text-5xl font-extrabold text-gray-900 mb-3">
+            Manage{' '}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
+              Events
+            </span>
+          </h1>
+          <p className="text-lg text-gray-600">
+            Click a date to view or create events
+          </p>
         </div>
 
         {error && (
@@ -754,30 +444,18 @@ export default function AdminEventsPage() {
               const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
               const hasEvents = datesWithEvents.has(dateKey);
               const isSelected = selectedDateKey === dateKey;
-              const eventTypes = getEventTypesOnDate(events, dateKey);
               return (
                 <button
                   key={dateKey}
                   type="button"
                   onClick={() => openPanel(dateKey)}
-                  className={`aspect-square rounded-xl text-sm font-semibold transition-all relative ${
+                  className={`aspect-square rounded-xl text-sm font-semibold transition-all ${
                     hasEvents
                       ? 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200 border border-indigo-200'
                       : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border border-gray-200'
                   } ${isSelected ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}`}
                 >
                   {day}
-                  {eventTypes.size > 0 && (
-                    <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 flex gap-0.5">
-                      {Array.from(eventTypes).map((eventType) => (
-                        <div
-                          key={eventType}
-                          className={`w-1.5 h-1.5 rounded-full ${getEventTypeColor(eventType)}`}
-                          title={eventType}
-                        />
-                      ))}
-                    </div>
-                  )}
                 </button>
               );
             })}
@@ -797,7 +475,7 @@ export default function AdminEventsPage() {
           />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
             <div
-              className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-6xl w-full max-h-[90vh] overflow-y-auto pointer-events-auto"
+              className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto pointer-events-auto"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -830,50 +508,6 @@ export default function AdminEventsPage() {
                         ? 'No events on this day. Create one below.'
                         : 'Create another event on this day.'}
                     </p>
-                    
-                    {/* Event Type - Moved to top */}
-                    <div>
-                      <label htmlFor="eventType" className="block text-sm font-semibold text-gray-700 mb-2">
-                        Event Type <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        id="eventType"
-                        value={eventType}
-                        onChange={(e) => {
-                          const newType = e.target.value as 'fun_assessment_day' | 'dexa_scan' | 'touchpoints';
-                          setEventType(newType);
-                          // Reset DEXA slots when switching away from DEXA
-                          if (newType !== 'dexa_scan') {
-                            setDexaTimeSlots([]);
-                          }
-                        }}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                        required
-                      >
-                        <option value="fun_assessment_day">FUN/Assessment Day</option>
-                        <option value="dexa_scan">DEXA Scan</option>
-                        <option value="touchpoints">Touchpoints</option>
-                      </select>
-                    </div>
-
-                    {/* Location */}
-                    <div>
-                      <label htmlFor="location" className="block text-sm font-semibold text-gray-700 mb-2">
-                        Location <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        id="location"
-                        value={location}
-                        onChange={(e) => setLocation(e.target.value as 'Location A' | 'Location B' | 'Location C')}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                        required
-                      >
-                        <option value="Location A">Location A</option>
-                        <option value="Location B">Location B</option>
-                        <option value="Location C">Location C</option>
-                      </select>
-                    </div>
-
                     <div>
                       <label htmlFor="eventName" className="block text-sm font-semibold text-gray-700 mb-2">
                         Event Name <span className="text-red-500">*</span>
@@ -888,30 +522,20 @@ export default function AdminEventsPage() {
                         required
                       />
                     </div>
-                    <div>
-                      <label htmlFor="eventDate" className="block text-sm font-semibold text-gray-700 mb-2">
-                        Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        id="eventDate"
-                        value={eventDate}
-                        onChange={(e) => setEventDate(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                        required
-                      />
-                    </div>
-                    
-                    {/* Conditional time input or DEXA table */}
-                    {eventType === 'dexa_scan' ? (
-                      <DexaTimeTable
-                        date={eventDate}
-                        timeSlots={dexaTimeSlots}
-                        setTimeSlots={setDexaTimeSlots}
-                        blockDuration={dexaBlockDuration}
-                        setBlockDuration={setDexaBlockDuration}
-                      />
-                    ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="eventDate" className="block text-sm font-semibold text-gray-700 mb-2">
+                          Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          id="eventDate"
+                          value={eventDate}
+                          onChange={(e) => setEventDate(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                          required
+                        />
+                      </div>
                       <div>
                         <label htmlFor="eventTime" className="block text-sm font-semibold text-gray-700 mb-2">
                           Time <span className="text-red-500">*</span>
@@ -925,28 +549,7 @@ export default function AdminEventsPage() {
                           required
                         />
                       </div>
-                    )}
-
-                    {/* Duration field for fun_assessment_day */}
-                    {eventType === 'fun_assessment_day' && (
-                      <div>
-                        <label htmlFor="duration" className="block text-sm font-semibold text-gray-700 mb-2">
-                          Duration (hours) <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          id="duration"
-                          value={duration}
-                          onChange={(e) => setDuration(e.target.value)}
-                          min="0.5"
-                          step="0.5"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                          placeholder="1.5"
-                          required
-                        />
-                      </div>
-                    )}
-
+                    </div>
                     <div>
                       <label htmlFor="eventDescription" className="block text-sm font-semibold text-gray-700 mb-2">
                         Event Description
@@ -959,6 +562,24 @@ export default function AdminEventsPage() {
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-white text-gray-900"
                         placeholder="Describe the event..."
                       />
+                    </div>
+                    <div>
+                      <label htmlFor="eventType" className="block text-sm font-semibold text-gray-700 mb-2">
+                        Event Type <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="eventType"
+                        value={eventType}
+                        onChange={(e) =>
+                          setEventType(e.target.value as 'fun_assessment_day' | 'dexa_scan' | 'touchpoints')
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                        required
+                      >
+                        <option value="fun_assessment_day">FUN/Assessment Day</option>
+                        <option value="dexa_scan">DEXA Scan</option>
+                        <option value="touchpoints">Touchpoints</option>
+                      </select>
                     </div>
                     <div>
                       <label htmlFor="maxParticipants" className="block text-sm font-semibold text-gray-700 mb-2">
@@ -976,57 +597,54 @@ export default function AdminEventsPage() {
                       />
                     </div>
 
-                    {/* Recurring events - only for non-DEXA events */}
-                    {eventType !== 'dexa_scan' && (
-                      <div className="border-t border-gray-200 pt-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isRecurring}
-                            onChange={(e) => setIsRecurring(e.target.checked)}
-                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                          <span className="text-sm font-semibold text-gray-700">
-                            This is a recurring event
-                          </span>
-                        </label>
-                        {isRecurring && (
-                          <div className="mt-4 space-y-4 pl-6 border-l-2 border-indigo-100">
-                            <div>
-                              <label htmlFor="recurrenceEndDate" className="block text-sm font-semibold text-gray-700 mb-2">
-                                End Date <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                type="date"
-                                id="recurrenceEndDate"
-                                value={recurrenceEndDate}
-                                onChange={(e) => setRecurrenceEndDate(e.target.value)}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                              />
-                            </div>
-                            <div>
-                              <label htmlFor="recurrenceFrequency" className="block text-sm font-semibold text-gray-700 mb-2">
-                                Recurring frequency
-                              </label>
-                              <select
-                                id="recurrenceFrequency"
-                                value={recurrenceFrequency}
-                                onChange={(e) =>
-                                  setRecurrenceFrequency(e.target.value as RecurrenceFrequency)
-                                }
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                              >
-                                {RECURRENCE_OPTIONS.map((opt) => (
-                                  <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                    <div className="border-t border-gray-200 pt-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isRecurring}
+                          onChange={(e) => setIsRecurring(e.target.checked)}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm font-semibold text-gray-700">
+                          This is a recurring event
+                        </span>
+                      </label>
+                      {isRecurring && (
+                        <div className="mt-4 space-y-4 pl-6 border-l-2 border-indigo-100">
+                          <div>
+                            <label htmlFor="recurrenceEndDate" className="block text-sm font-semibold text-gray-700 mb-2">
+                              End Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              id="recurrenceEndDate"
+                              value={recurrenceEndDate}
+                              onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                            />
                           </div>
-                        )}
-                      </div>
-                    )}
+                          <div>
+                            <label htmlFor="recurrenceFrequency" className="block text-sm font-semibold text-gray-700 mb-2">
+                              Recurring frequency
+                            </label>
+                            <select
+                              id="recurrenceFrequency"
+                              value={recurrenceFrequency}
+                              onChange={(e) =>
+                                setRecurrenceFrequency(e.target.value as RecurrenceFrequency)
+                              }
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                            >
+                              {RECURRENCE_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     <div className="flex gap-3 pt-4">
                       <button

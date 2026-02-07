@@ -7,7 +7,6 @@ import { createClient } from '@/lib/supabase/client';
 import { loginSchema, type LoginInput } from '@/lib/validations';
 import { logger, logAuthEvent } from '@/lib/logger';
 import { checkRateLimit, RateLimitPresets } from '@/lib/rate-limit';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -137,14 +136,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center px-4 py-12 relative">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-      <div className="max-w-md w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-soft-lg p-8 border border-gray-100 dark:border-gray-700 animate-scale-in">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center px-4 py-12">
+      <div className="max-w-md w-full bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft-lg p-8 border border-gray-100 animate-scale-in">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">Welcome Back</h1>
-          <p className="text-gray-600 dark:text-gray-300">Sign in to your account</p>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Welcome Back</h1>
+          <p className="text-gray-600">Sign in to your account</p>
         </div>
         
         {error && (
